@@ -21,14 +21,22 @@ Funzionalità (Ipotesi A — MVP):
 * Registrazione dell'abbinamento **codice ↔ utente** ad ogni riscatto (data, ora, IP).
 * Lo stesso codice è condiviso tra tutte le copie del libro e può sbloccare più contenuti; un contenuto può essere sbloccato da più codici.
 * Backoffice: gestione codici, associazione ai contenuti, import CSV, elenco riscatti.
+* Integrazione **YOOtheme Pro**: elemento builder "Materiali Codici Libro" (gruppo Raffaello), oltre allo shortcode.
 * Aggiornamento automatico da GitHub.
 
 == Utilizzo ==
 
 1. Definire i materiali di una pagina dal meta box **"Materiali sbloccabili (Codici Libro)"**.
 2. Inserire lo shortcode `[raffaello_materiali]` nel contenuto (oppure `[raffaello_materiali post_id="123"]`).
-3. Creare i codici da **Codici Libro → Codici** (o importarli via CSV) e associarli ai contenuti.
-4. Lo shortcode `[raffaello_codice]` mostra il solo form di inserimento (es. nell'area riservata).
+3. In alternativa allo shortcode, con YOOtheme Pro trascinare l'elemento **"Materiali Codici Libro"** (gruppo Raffaello) nel layout.
+4. Creare i codici da **Codici Libro → Codici** (o importarli via CSV) e associarli ai contenuti.
+5. Lo shortcode `[raffaello_codice]` mostra il solo form di inserimento (es. nell'area riservata).
+
+== Test su staging ==
+
+È incluso uno script di seed (solo CLI) che crea una pagina di esempio con materiali e codici di prova:
+
+`wp eval-file tools/seed.php` oppure `php tools/seed.php` (rimozione: `php tools/seed.php --remove`).
 
 == Requisiti ==
 

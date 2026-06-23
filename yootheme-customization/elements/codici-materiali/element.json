@@ -1,0 +1,65 @@
+{
+    "name": "rcl_materiali",
+    "title": "Materiali Codici Libro",
+    "icon": "${url:images/icon.svg}",
+    "iconSmall": "${url:images/iconSmall.svg}",
+    "element": true,
+    "width": 600,
+    "templates": {
+        "render": "./templates/template.php",
+        "content": "./templates/content.php"
+    },
+    "group": "Raffaello",
+    "fields": {
+        "post_id": {
+            "label": "ID contenuto",
+            "description": "Lascia vuoto per usare il contenuto corrente. Indica un ID solo per mostrare i materiali di un'altra pagina.",
+            "type": "number"
+        },
+        "source": "${builder.source}",
+        "position": "${builder.position}",
+        "position_left": "${builder.position_left}",
+        "position_right": "${builder.position_right}",
+        "position_top": "${builder.position_top}",
+        "position_bottom": "${builder.position_bottom}",
+        "position_z_index": "${builder.position_z_index}",
+        "margin": "${builder.margin}",
+        "margin_remove_top": "${builder.margin_remove_top}",
+        "margin_remove_bottom": "${builder.margin_remove_bottom}",
+        "maxwidth": "${builder.maxwidth}",
+        "maxwidth_breakpoint": "${builder.maxwidth_breakpoint}",
+        "block_align": "${builder.block_align}",
+        "block_align_breakpoint": "${builder.block_align_breakpoint}",
+        "block_align_fallback": "${builder.block_align_fallback}",
+        "item_animation": "${builder.animation}",
+        "visibility": "${builder.visibility}",
+        "name": "${builder.name}",
+        "status": "${builder.status}",
+        "id": "${builder.id}",
+        "class": "${builder.cls}",
+        "css": {
+            "label": "CSS",
+            "description": "Inserisci CSS personalizzato. I selettori <code>.el-element</code> verranno prefissati automaticamente per questo elemento.",
+            "type": "editor",
+            "editor": "code",
+            "mode": "css",
+            "attrs": {
+                "debounce": 500
+            }
+        }
+    },
+    "fieldset": {
+        "default": {
+            "type": "tabs",
+            "fields": [
+                {
+                    "title": "Contenuto",
+                    "fields": [
+                        "post_id"
+                    ]
+                },
+                "${builder.advanced}"
+            ]
+        }
+    }
+}

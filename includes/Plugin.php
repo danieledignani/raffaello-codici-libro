@@ -35,6 +35,18 @@ class Plugin
         if (is_admin()) {
             (new Admin())->register();
         }
+
+        // Integrazione YOOtheme Pro: registra l'elemento builder se il tema è attivo.
+        add_action('after_setup_theme', [$this, 'register_yootheme_builder']);
+    }
+
+    /** Carica l'elemento builder YOOtheme, solo se YOOtheme Pro è presente. */
+    public function register_yootheme_builder(): void
+    {
+        if (!class_exists('YOOtheme\\Application', false)) {
+            return;
+        }
+        \YOOtheme\Application::getInstance()->load(RCL_PLUGIN_DIR . 'yootheme-customization/bootstrap.php');
     }
 
     /** Esegue dbDelta se la versione DB salvata è diversa da quella corrente. */
