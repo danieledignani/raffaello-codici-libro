@@ -1,0 +1,122 @@
+/* Raffaello Codici Libro — stili frontend */
+
+.rcl-materiali {
+    margin: 1.5em 0;
+}
+
+.rcl-lista {
+    list-style: none;
+    margin: 0 0 1em;
+    padding: 0;
+}
+
+.rcl-materiale {
+    display: flex;
+    align-items: center;
+    gap: .5em;
+    padding: .6em .8em;
+    border: 1px solid #e2e2e2;
+    border-radius: 6px;
+    margin-bottom: .4em;
+    background: #fff;
+}
+
+.rcl-materiale--bloccato {
+    opacity: .75;
+    background: #fafafa;
+}
+
+.rcl-icona {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+}
+
+.rcl-icona--lock {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23999'%3E%3Cpath d='M12 1a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2h-1V6a5 5 0 0 0-5-5zm-3 8V6a3 3 0 0 1 6 0v3H9z'/%3E%3C/svg%3E");
+}
+
+.rcl-icona--ok {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%232e7d32'%3E%3Cpath d='M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z'/%3E%3C/svg%3E");
+}
+
+.rcl-badge {
+    margin-left: auto;
+    font-size: .75em;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: #b26a00;
+    border: 1px solid #f0c98a;
+    background: #fff7ec;
+    padding: .15em .5em;
+    border-radius: 999px;
+}
+
+.rcl-form {
+    border: 1px solid #e2e2e2;
+    border-radius: 8px;
+    padding: 1em 1.2em;
+    background: #f7f9fc;
+}
+
+.rcl-label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: .5em;
+}
+
+.rcl-form-row {
+    display: flex;
+    gap: .5em;
+    flex-wrap: wrap;
+}
+
+.rcl-input {
+    flex: 1 1 200px;
+    padding: .55em .7em;
+    border: 1px solid #c9c9c9;
+    border-radius: 6px;
+    text-transform: uppercase;
+}
+
+.rcl-button {
+    display: inline-block;
+    padding: .55em 1.2em;
+    border: 0;
+    border-radius: 6px;
+    background: #0a5ad4;
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.rcl-button:hover {
+    background: #0848a8;
+    color: #fff;
+}
+
+.rcl-message {
+    margin-top: .7em;
+    font-size: .95em;
+    min-height: 1.2em;
+}
+
+.rcl-message--ok {
+    color: #2e7d32;
+}
+
+.rcl-message--ko {
+    color: #c62828;
+}
+
+.rcl-login-invito {
+    border: 1px dashed #c9c9c9;
+    border-radius: 8px;
+    padding: 1em 1.2em;
+    background: #f7f9fc;
+}

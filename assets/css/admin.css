@@ -1,0 +1,17 @@
+/* Raffaello Codici Libro — stili admin */
+
+.rcl-materiali-table th,
+.rcl-materiali-table td {
+    vertical-align: middle;
+}
+
+.rcl-materiali-table .rcl-attachment-name {
+    display: inline-block;
+    margin-right: .5em;
+    color: #555;
+    font-style: italic;
+}
+
+.rcl-remove-row {
+    color: #b32d2e;
+}
