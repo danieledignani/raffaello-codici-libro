@@ -123,7 +123,11 @@ class Frontend
     private function render_form(int $post_id): void
     {
         if (!is_user_logged_in()) {
-            $login_url = wp_login_url(get_permalink($post_id) ?: home_url('/'));
+            // Se Raffaello Identity (SSO) è attivo usa il suo login OIDC, come fa
+            // il link "Accedi" del menu; altrimenti fallback al login WordPress.
+            $login_url = function_exists('ri_login_url')
+                ? ri_login_url()
+                : wp_login_url(get_permalink($post_id) ?: home_url('/'));
             echo '<div class="rcl-login-invito">';
             echo '<p>' . esc_html__('Accedi per sbloccare i materiali con il codice del tuo libro.', 'raffaello-codici-libro') . '</p>';
             echo '<a class="rcl-button" href="' . esc_url($login_url) . '">' . esc_html__('Accedi', 'raffaello-codici-libro') . '</a>';

@@ -4,7 +4,7 @@ Tags: codici, sblocco, materiali, download, scuola, identity, sso
 Requires at least: 5.8
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.4.0
+Stable tag: 1.4.1
 License: GPLv2 or later
 
 Sblocco di aree riservate e materiali scaricabili tramite i codici stampati sui libri scolastici, integrato con Raffaello Identity (SSO).
@@ -46,6 +46,9 @@ Funzionalità (Ipotesi A — MVP):
 * Plugin **Raffaello Identity** per l'autenticazione SSO degli utenti.
 
 == Changelog ==
+
+= 1.4.1 =
+* Corretto: il pulsante "Accedi" mostrato nei form di sblocco (compresa la pagina bloccata) per gli utenti non autenticati ora usa il login di Raffaello Identity (SSO, OIDC) tramite ri_login_url(), come il link del menu, invece del login standard di WordPress. Se Raffaello Identity non è attivo si usa il fallback a wp_login_url().
 
 = 1.4.0 =
 * Nuovo: blocco dell'intera pagina con il codice. Nel riquadro "Codici Libro — Sblocco" è disponibile l'interruttore "Blocca l'intera pagina con il codice": se attivo (e la pagina ha codici associati), gli utenti che non hanno riscattato un codice valido vedono il form di sblocco al posto del contenuto, mentre amministratori e utenti abilitati vedono la pagina normalmente. Dopo lo sblocco la pagina viene mostrata.
