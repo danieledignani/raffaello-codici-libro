@@ -1,18 +1,18 @@
 {
   "name": "Raffaello Codici Libro",
-  "version": "1.2.0",
-  "download_url": "https://github.com/danieledignani/raffaello-codici-libro/releases/download/1.2.0/raffaello-codici-libro.zip",
+  "version": "1.2.1",
+  "download_url": "https://github.com/danieledignani/raffaello-codici-libro/releases/download/1.2.1/raffaello-codici-libro.zip",
   "homepage": "https://raffaellolibri.it",
   "requires": "5.8",
   "tested": "6.5",
   "requires_php": "7.4",
-  "last_updated": "2026-06-29 10:57:07",
+  "last_updated": "2026-06-29 15:52:33",
   "upgrade_notice": "Aggiornamento automatico da GitHub",
   "author": "Gruppo Raffaello",
   "author_homepage": "https://github.com/danieledignani",
   "sections": {
     "description": "Sblocco di aree riservate e materiali scaricabili tramite i codici stampati sui libri scolastici, integrato con Raffaello Identity (SSO).",
     "installation": "Carica il plugin tramite il pannello 'Plugin > Aggiungi nuovo' o scompatta nella cartella wp-content/plugins/",
-    "changelog": "<li>Aggiunge campo per-pagina (ACF/meta box) per i codici di sblocco con creazione automatica e sync delle associazioni</li>\n<li>Update JSON to version 1.1.0</li>"
+    "changelog": "<li>Corregge i messaggi di errore del riscatto AJAX e l'IP client dietro proxy</li>\n<li>Update JSON to version 1.2.0</li>"
   }
 }
