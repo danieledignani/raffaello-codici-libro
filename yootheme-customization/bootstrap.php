@@ -14,10 +14,14 @@ return [
 
     ],
 
-    // NOTA: l'integrazione "source.init" che estendeva la source "Site" con il
-    // campo "Accesso materiali" (gating di sezione) è temporaneamente disattivata:
-    // nella 1.3.0 causava un errore fatale durante il render front-end di YOOtheme.
-    // La classe YooSource resta nel plugin in attesa di reintegrarla correttamente
-    // una volta individuata la causa esatta sul server (vedi readme/changelog).
+    // Estende la source "Site" con il campo booleano "Accesso materiali",
+    // usato dalle Access Condition / Dynamic Condition del builder per il
+    // gating di sezione. Il listener è registrato come metodo STATICO (senza
+    // '@'), nello stesso formato usato da YOOtheme core/WooCommerce.
+    'events' => [
+        'source.init' => [
+            \RaffaelloCodiciLibro\YooSource::class => 'init_source',
+        ],
+    ],
 
 ];

@@ -9,65 +9,73 @@ if (!defined('ABSPATH')) {
 /**
  * Integrazione YOOtheme Pro — Dynamic Content Source.
  *
- * Aggiunge alla source "Site" un campo booleano che indica se l'utente corrente
- * ha accesso ai materiali della pagina in rendering (cioè ha riscattato un codice
- * valido collegato a quella pagina, oppure è amministratore).
+ * Estende il tipo "Site" della source di YOOtheme con un campo booleano
+ * "Accesso materiali (pagina corrente)" (gruppo "Codici Libro", marcato come
+ * condizione): indica se l'utente corrente può accedere ai materiali della
+ * pagina in rendering (ha riscattato un codice valido collegato, oppure è
+ * amministratore, coerentemente con Codes::user_can_access).
  *
- * Il campo è pensato per le Access Condition / Dynamic Condition del builder:
- * si imposta una condizione "non vuoto" su una sezione per mostrarla solo agli
- * utenti sbloccati, e la condizione inversa (Reversed) su una sezione contenente
- * il form [raffaello_codice] mostrata a chi è ancora bloccato.
+ * Pensato per le Access Condition / Dynamic Condition del builder: condizione
+ * "non vuoto" sulla sezione protetta e condizione inversa (Reversed) sulla
+ * sezione con il form [raffaello_codice]. Valutato lato server al render: la
+ * sezione protetta non viene emessa nell'HTML quando l'utente non ha accesso.
  *
- * Il valore è calcolato lato server al momento del render: quando l'utente non
- * ha accesso la sezione protetta non viene nemmeno emessa nell'HTML.
+ * Formati allineati al codice di YOOtheme: core builder-source SiteType (campo
+ * "is_guest" con 'condition' => true; campi "page_url"/"request" con
+ * 'extensions.call') e integrazione WooCommerce (campi Boolean sul tipo Site).
+ * Il listener è registrato come metodo STATICO in bootstrap.php (senza '@'),
+ * come fa LoadSourceTypes di WooCommerce/core; il resolver è un callable
+ * serializzabile (stringa "Classe::metodo"), perché lo schema viene messo in
+ * cache (niente closure nei resolver).
  */
 class YooSource
 {
     /**
-     * Handler dell'evento "source.init": estende il tipo "Site" con il campo.
+     * Listener dell'evento "source.init": estende il tipo "Site".
      *
-     * objectType() effettua un merge ricorsivo sui tipi esistenti, quindi il
-     * campo viene aggiunto alla source "Site" del core senza ridefinirla. Lo
-     * mettiamo su "Site" (non su "User") così compare solo nel contesto del sito
-     * / utente corrente e non per ogni autore. Il resolver dev'essere un callable
-     * serializzabile (metodo statico), perché lo schema viene messo in cache.
-     *
-     * @param object $source Istanza YOOtheme\Builder\Source.
+     * @param \YOOtheme\Builder\Source $source
      */
-    public function init_source($source): void
+    public static function init_source($source): void
     {
-        $source->objectType('Site', [
+        $source->objectType('Site', fn() => self::config());
+    }
+
+    /**
+     * Definizione del campo aggiunto (in merge) al tipo "Site".
+     *
+     * @return array<string, mixed>
+     */
+    public static function config(): array
+    {
+        return [
             'fields' => [
                 'rcl_page_access' => [
                     'type'     => 'Boolean',
                     'metadata' => [
-                        'label' => __('Accesso materiali (pagina corrente)', 'raffaello-codici-libro'),
-                        'group' => __('Codici Libro', 'raffaello-codici-libro'),
+                        'label'     => 'Accesso materiali (pagina corrente)',
+                        'group'     => 'Codici Libro',
+                        'condition' => true,
                     ],
                     'extensions' => [
-                        'call' => self::class . '::resolve_page_access',
+                        'call' => __CLASS__ . '::resolve_page_access',
                     ],
                 ],
             ],
-        ]);
+        ];
     }
 
     /**
      * Risolve il campo: true se l'utente loggato può accedere ai materiali della
-     * pagina attualmente in rendering. Gli amministratori risultano sempre true
-     * (anteprima editoriale), coerentemente con Codes::user_can_access.
-     *
-     * Firma standard del resolver YOOtheme: ($obj, $args, $context, $info).
+     * pagina attualmente in rendering. Nessun parametro richiesto (usa i globali
+     * di WordPress), come i resolver senza argomenti del core (es. resolveRequest).
      */
-    public static function resolve_page_access($obj, $args, $context, $info): bool
+    public static function resolve_page_access(): bool
     {
         if (!is_user_logged_in()) {
             return false;
         }
         $post_id = (int) get_the_ID();
-        if ($post_id <= 0) {
-            return false;
-        }
-        return Codes::user_can_access(get_current_user_id(), $post_id);
+
+        return $post_id > 0 && Codes::user_can_access(get_current_user_id(), $post_id);
     }
 }
