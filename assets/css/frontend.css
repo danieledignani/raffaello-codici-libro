@@ -120,3 +120,22 @@
     padding: 1em 1.2em;
     background: #f7f9fc;
 }
+
+/* Blocco dell'intera pagina: form di sblocco al posto del contenuto. */
+.rcl-page-gate {
+    padding: 3em 1.2em;
+}
+
+.rcl-page-gate__inner {
+    max-width: 560px;
+    margin: 0 auto;
+}
+
+.rcl-page-gate__title {
+    margin: 0 0 .4em;
+}
+
+.rcl-page-gate__intro {
+    margin: 0 0 1.2em;
+    color: #555;
+}

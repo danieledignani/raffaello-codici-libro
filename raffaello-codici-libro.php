@@ -3,7 +3,7 @@
  * Plugin Name: Raffaello Codici Libro
  * Plugin URI: https://raffaellolibri.it
  * Description: Sblocco di aree riservate e materiali scaricabili tramite i codici stampati sui libri scolastici. Integrato con Raffaello Identity (SSO). Mostra i materiali bloccati in anteprima con form di sblocco contestuale e registra l'abbinamento codice ↔ utente.
- * Version: 1.3.3
+ * Version: 1.4.0
  * Author: Gruppo Raffaello
  * Text Domain: raffaello-codici-libro
  * Domain Path: /languages
@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('RCL_VERSION', '1.3.3');
+define('RCL_VERSION', '1.4.0');
 define('RCL_PLUGIN_FILE', __FILE__);
 define('RCL_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('RCL_PLUGIN_URL', plugin_dir_url(__FILE__));

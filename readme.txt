@@ -4,7 +4,7 @@ Tags: codici, sblocco, materiali, download, scuola, identity, sso
 Requires at least: 5.8
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.3.3
+Stable tag: 1.4.0
 License: GPLv2 or later
 
 Sblocco di aree riservate e materiali scaricabili tramite i codici stampati sui libri scolastici, integrato con Raffaello Identity (SSO).
@@ -28,7 +28,7 @@ Funzionalità (Ipotesi A — MVP):
 == Utilizzo ==
 
 1. Definire i materiali di una pagina dal meta box **"Materiali sbloccabili (Codici Libro)"**.
-2. Indicare i codici che sbloccano la pagina nel campo **"Codici Libro — Sblocco"** (riquadro laterale dell'editor).
+2. Indicare i codici che sbloccano la pagina nel campo **"Codici Libro — Sblocco"** (riquadro laterale dell'editor). Nello stesso riquadro, l'interruttore **"Blocca l'intera pagina con il codice"** rende l'intera pagina accessibile solo a chi ha riscattato un codice (agli altri viene mostrato il form di sblocco al posto del contenuto).
 3. Inserire lo shortcode `[raffaello_materiali]` nel contenuto (oppure `[raffaello_materiali post_id="123"]`).
 4. In alternativa allo shortcode, con YOOtheme Pro trascinare l'elemento **"Materiali Codici Libro"** (gruppo Raffaello) nel layout.
 5. In alternativa al campo per-pagina, i codici si possono creare/associare anche da **Codici Libro → Codici** (o importarli via CSV).
@@ -46,6 +46,9 @@ Funzionalità (Ipotesi A — MVP):
 * Plugin **Raffaello Identity** per l'autenticazione SSO degli utenti.
 
 == Changelog ==
+
+= 1.4.0 =
+* Nuovo: blocco dell'intera pagina con il codice. Nel riquadro "Codici Libro — Sblocco" è disponibile l'interruttore "Blocca l'intera pagina con il codice": se attivo (e la pagina ha codici associati), gli utenti che non hanno riscattato un codice valido vedono il form di sblocco al posto del contenuto, mentre amministratori e utenti abilitati vedono la pagina normalmente. Dopo lo sblocco la pagina viene mostrata.
 
 = 1.3.3 =
 * Corretto: il campo per-pagina "Codici Libro — Sblocco" (versione ACF) non salvava i codici digitati. Il salvataggio leggeva il valore con get_field(), che il filtro acf/load_value sostituisce con le associazioni già presenti, perdendo l'input. Ora i codici digitati sulla pagina vengono creati e associati correttamente e risultano visibili sia sulla pagina sia nel menu Codici Libro.

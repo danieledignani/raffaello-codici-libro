@@ -22,6 +22,7 @@ if (!defined('ABSPATH')) {
 class CodeField
 {
     const META_KEY = 'rcl_codici_sblocco';
+    const META_BLOCK = 'rcl_blocca_pagina';
 
     public function register(): void
     {
@@ -67,6 +68,13 @@ class CodeField
                 'rows'         => 4,
                 'new_lines'    => '',
                 'instructions' => __('Un codice del libro per riga (o separati da virgola). Chi riscatta uno di questi codici sblocca i materiali della pagina. I codici non ancora presenti vengono creati automaticamente.', 'raffaello-codici-libro'),
+            ], [
+                'key'          => 'field_rcl_blocca_pagina',
+                'label'        => __('Blocca l\'intera pagina con il codice', 'raffaello-codici-libro'),
+                'name'         => self::META_BLOCK,
+                'type'         => 'true_false',
+                'ui'           => 1,
+                'instructions' => __('Se attivo, l\'intera pagina è accessibile solo a chi ha riscattato uno dei codici qui sopra; agli altri viene mostrato il form di sblocco al posto del contenuto.', 'raffaello-codici-libro'),
             ]],
             'location'   => $location,
             'menu_order' => 0,
@@ -131,6 +139,15 @@ class CodeField
             <?php esc_html_e('Un codice del libro per riga. Chi riscatta uno di questi codici sblocca i materiali della pagina. I codici non ancora presenti vengono creati automaticamente.', 'raffaello-codici-libro'); ?>
         </p>
         <textarea name="<?php echo esc_attr(self::META_KEY); ?>" rows="4" style="width:100%;"><?php echo esc_textarea($value); ?></textarea>
+        <p style="margin-top:10px;">
+            <label>
+                <input type="checkbox" name="<?php echo esc_attr(self::META_BLOCK); ?>" value="1" <?php checked(get_post_meta($post->ID, self::META_BLOCK, true), '1'); ?> />
+                <?php esc_html_e('Blocca l\'intera pagina con il codice', 'raffaello-codici-libro'); ?>
+            </label>
+        </p>
+        <p class="description">
+            <?php esc_html_e('Se attivo, l\'intera pagina è accessibile solo a chi ha riscattato uno dei codici; agli altri viene mostrato il form di sblocco al posto del contenuto.', 'raffaello-codici-libro'); ?>
+        </p>
         <?php
     }
 
@@ -147,6 +164,8 @@ class CodeField
         }
         $raw = isset($_POST[self::META_KEY]) ? (string) wp_unslash($_POST[self::META_KEY]) : '';
         $this->sync_codes($post_id, $raw);
+
+        update_post_meta($post_id, self::META_BLOCK, empty($_POST[self::META_BLOCK]) ? '0' : '1');
     }
 
     /* ----------------------------------------------------------------------
