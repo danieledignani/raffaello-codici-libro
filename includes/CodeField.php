@@ -30,6 +30,7 @@ class CodeField
             add_action('acf/init', [$this, 'register_acf']);
             add_filter('acf/load_value/name=' . self::META_KEY, [$this, 'acf_load_value'], 10, 3);
             add_action('acf/save_post', [$this, 'acf_save'], 20);
+            add_filter('acf/prepare_field/key=field_rcl_codici_status', [$this, 'acf_prepare_status']);
         } else {
             add_action('add_meta_boxes', [$this, 'add_meta_box']);
             add_action('save_post', [$this, 'save_native'], 20, 2);
@@ -68,6 +69,16 @@ class CodeField
                 'rows'         => 4,
                 'new_lines'    => '',
                 'instructions' => __('Un codice del libro per riga (o separati da virgola). Chi riscatta uno di questi codici sblocca i materiali della pagina. I codici non ancora presenti vengono creati automaticamente.', 'raffaello-codici-libro'),
+            ], [
+                // Riepilogo (sola lettura) dei codici associati con stato:
+                // popolato dinamicamente in acf_prepare_status().
+                'key'       => 'field_rcl_codici_status',
+                'label'     => '',
+                'name'      => '',
+                'type'      => 'message',
+                'message'   => '',
+                'esc_html'  => 0,
+                'new_lines' => '',
             ], [
                 'key'          => 'field_rcl_blocca_pagina',
                 'label'        => __('Blocca l\'intera pagina con il codice', 'raffaello-codici-libro'),
@@ -111,6 +122,58 @@ class CodeField
         $this->sync_codes($post_id, $raw);
     }
 
+    /** Popola dinamicamente il campo "message" col riepilogo dei codici associati. */
+    public function acf_prepare_status($field)
+    {
+        $post_id = isset($_GET['post']) ? (int) $_GET['post'] : 0;
+        $field['message'] = $post_id > 0 ? $this->codes_status_html($post_id) : '';
+        return $field;
+    }
+
+    /* ----------------------------------------------------------------------
+     * Riepilogo stato dei codici associati (sola lettura)
+     * -------------------------------------------------------------------- */
+
+    /** HTML della lista dei codici associati alla pagina con il loro stato. */
+    private function codes_status_html(int $post_id): string
+    {
+        $codes = Database::get_post_codes_full($post_id);
+        if (empty($codes)) {
+            return '<p class="description" style="margin:6px 0 0;">'
+                . esc_html__('Nessun codice ancora associato a questa pagina.', 'raffaello-codici-libro')
+                . '</p>';
+        }
+
+        $out  = '<p class="description" style="margin:8px 0 4px;">' . esc_html__('Codici associati:', 'raffaello-codici-libro') . '</p>';
+        $out .= '<ul class="rcl-codici-stato" style="margin:0; padding:0; list-style:none;">';
+        foreach ($codes as $c) {
+            list($label, $color) = $this->code_status($c);
+            $edit_url = add_query_arg(
+                ['page' => 'rcl_codici', 'view' => 'edit', 'id' => (int) $c->id],
+                admin_url('admin.php')
+            );
+            $out .= '<li style="margin:3px 0; font-size:12px; line-height:1.5;">'
+                . '<code>' . esc_html($c->codice) . '</code> '
+                . '<span style="color:' . esc_attr($color) . '; font-weight:600;">' . esc_html($label) . '</span> '
+                . '<a href="' . esc_url($edit_url) . '" target="_blank" rel="noopener" style="text-decoration:none;">' . esc_html__('gestisci', 'raffaello-codici-libro') . ' &rsaquo;</a>'
+                . '</li>';
+        }
+        $out .= '</ul>';
+        return $out;
+    }
+
+    /** Etichetta + colore dello stato di un codice. */
+    private function code_status($code): array
+    {
+        if ((int) $code->attivo !== 1) {
+            return [__('Disattivo', 'raffaello-codici-libro'), '#b26a00'];
+        }
+        if (!empty($code->data_scadenza) && strtotime($code->data_scadenza) < current_time('timestamp')) {
+            return [__('Scaduto', 'raffaello-codici-libro'), '#c62828'];
+        }
+        return [__('Attivo', 'raffaello-codici-libro'), '#2e7d32'];
+    }
+
     /* ----------------------------------------------------------------------
      * Versione meta box nativa (fallback senza ACF)
      * -------------------------------------------------------------------- */
@@ -139,6 +202,7 @@ class CodeField
             <?php esc_html_e('Un codice del libro per riga. Chi riscatta uno di questi codici sblocca i materiali della pagina. I codici non ancora presenti vengono creati automaticamente.', 'raffaello-codici-libro'); ?>
         </p>
         <textarea name="<?php echo esc_attr(self::META_KEY); ?>" rows="4" style="width:100%;"><?php echo esc_textarea($value); ?></textarea>
+        <?php echo $this->codes_status_html($post->ID); ?>
         <p style="margin-top:10px;">
             <label>
                 <input type="checkbox" name="<?php echo esc_attr(self::META_BLOCK); ?>" value="1" <?php checked(get_post_meta($post->ID, self::META_BLOCK, true), '1'); ?> />

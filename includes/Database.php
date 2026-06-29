@@ -239,6 +239,24 @@ class Database
         );
     }
 
+    /** Come get_post_codes, ma con tutti i campi del codice (per mostrare lo stato). */
+    public static function get_post_codes_full(int $post_id): array
+    {
+        global $wpdb;
+        $codice_post = self::table('codice_post');
+        $codici = self::table('codici');
+        return $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT c.*
+                 FROM {$codice_post} cp
+                 JOIN {$codici} c ON c.id = cp.codice_id
+                 WHERE cp.post_id = %d
+                 ORDER BY c.codice ASC",
+                $post_id
+            )
+        );
+    }
+
     /**
      * Imposta i codici che sbloccano un contenuto, sostituendo solo i legami di
      * QUESTO contenuto (non tocca gli altri contenuti collegati agli stessi codici).
