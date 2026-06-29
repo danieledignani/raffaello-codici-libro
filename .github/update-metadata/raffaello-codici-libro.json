@@ -1,18 +1,18 @@
 {
   "name": "Raffaello Codici Libro",
-  "version": "1.3.1",
-  "download_url": "https://github.com/danieledignani/raffaello-codici-libro/releases/download/1.3.1/raffaello-codici-libro.zip",
+  "version": "1.3.2",
+  "download_url": "https://github.com/danieledignani/raffaello-codici-libro/releases/download/1.3.2/raffaello-codici-libro.zip",
   "homepage": "https://raffaellolibri.it",
   "requires": "5.8",
   "tested": "6.5",
   "requires_php": "7.4",
-  "last_updated": "2026-06-29 18:51:29",
+  "last_updated": "2026-06-29 21:04:45",
   "upgrade_notice": "Aggiornamento automatico da GitHub",
   "author": "Gruppo Raffaello",
   "author_homepage": "https://github.com/danieledignani",
   "sections": {
     "description": "Sblocco di aree riservate e materiali scaricabili tramite i codici stampati sui libri scolastici, integrato con Raffaello Identity (SSO).",
     "installation": "Carica il plugin tramite il pannello 'Plugin > Aggiungi nuovo' o scompatta nella cartella wp-content/plugins/",
-    "changelog": "<li>Disattiva l'integrazione source.init di YOOtheme che causava un errore fatale</li>\n<li>Update JSON to version 1.3.0</li>"
+    "changelog": "<li>Reintroduce il gating di sezione YOOtheme con il formato evento corretto</li>\n<li>Update JSON to version 1.3.1</li>"
   }
 }
