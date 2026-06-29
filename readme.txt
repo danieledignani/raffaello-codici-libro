@@ -4,7 +4,7 @@ Tags: codici, sblocco, materiali, download, scuola, identity, sso
 Requires at least: 5.8
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.0.0
+Stable tag: 1.2.1
 License: GPLv2 or later
 
 Sblocco di aree riservate e materiali scaricabili tramite i codici stampati sui libri scolastici, integrato con Raffaello Identity (SSO).
@@ -46,6 +46,10 @@ Funzionalità (Ipotesi A — MVP):
 * Plugin **Raffaello Identity** per l'autenticazione SSO degli utenti.
 
 == Changelog ==
+
+= 1.2.1 =
+* Corretto: i messaggi di errore del riscatto via AJAX (es. "Codice non valido", "Questo codice è scaduto") ora vengono mostrati correttamente al posto del messaggio generico.
+* Migliorato: l'IP registrato ad ogni riscatto considera l'IP reale del client dietro reverse proxy/CDN (es. Cloudflare via CF-Connecting-IP), con fallback a REMOTE_ADDR. Intestazioni filtrabili con 'rcl_client_ip_headers'.
 
 = 1.2.0 =
 * Campo per-pagina (ACF o meta box nativo) per inserire i codici che sbloccano la pagina, con creazione automatica dei codici nuovi.

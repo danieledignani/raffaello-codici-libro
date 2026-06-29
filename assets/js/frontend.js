@@ -39,8 +39,14 @@
                 var m = (res && res.data && res.data.message) ? res.data.message : rclData.i18n.error;
                 $msg.addClass('rcl-message--ko').text(m);
             }
-        }).fail(function () {
-            $msg.addClass('rcl-message--ko').text(rclData.i18n.error);
+        }).fail(function (jqXHR) {
+            // Gli errori di validazione arrivano con stato HTTP 422/401: il messaggio
+            // specifico (es. "Codice non valido") è nel corpo JSON in data.message.
+            // Lo mostriamo, con fallback al messaggio generico se manca il corpo
+            // (es. errore di rete o risposta non JSON).
+            var data = (jqXHR && jqXHR.responseJSON) ? jqXHR.responseJSON.data : null;
+            var m = (data && data.message) ? data.message : rclData.i18n.error;
+            $msg.addClass('rcl-message--ko').text(m);
         }).always(function () {
             $btn.prop('disabled', false);
         });

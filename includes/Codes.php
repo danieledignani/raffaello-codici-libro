@@ -87,11 +87,40 @@ class Codes
         ];
     }
 
-    /** IP del client, normalizzato e validato (solo a scopo di log/anti-abuso). */
+    /**
+     * IP del client, validato (solo a scopo di log/anti-abuso).
+     *
+     * Dietro un reverse proxy / CDN (es. Cloudflare) REMOTE_ADDR è l'IP del proxy,
+     * non quello reale del visitatore. Proviamo quindi, in ordine, alcune
+     * intestazioni note impostate dai proxy, con fallback a REMOTE_ADDR.
+     *
+     * NB: queste intestazioni sono attendibili solo se il sito riceve traffico
+     * esclusivamente tramite il proxy (come qui, dietro Cloudflare); altrimenti
+     * sono falsificabili dal client. L'elenco è filtrabile via
+     * 'rcl_client_ip_headers' per adattarlo ad altri proxy o per disabilitare la
+     * lettura delle intestazioni (restituendo un array vuoto).
+     */
     private static function client_ip(): ?string
     {
+        $headers = apply_filters('rcl_client_ip_headers', [
+            'HTTP_CF_CONNECTING_IP', // Cloudflare
+            'HTTP_X_FORWARDED_FOR',  // proxy/CDN standard (lista separata da virgole)
+        ]);
+
+        foreach ((array) $headers as $header) {
+            if (empty($_SERVER[$header])) {
+                continue;
+            }
+            // X-Forwarded-For può contenere più IP: il primo è il client originale.
+            foreach (explode(',', (string) wp_unslash($_SERVER[$header])) as $candidate) {
+                $ip = filter_var(trim($candidate), FILTER_VALIDATE_IP);
+                if ($ip) {
+                    return $ip;
+                }
+            }
+        }
+
         $ip = isset($_SERVER['REMOTE_ADDR']) ? wp_unslash($_SERVER['REMOTE_ADDR']) : '';
-        $ip = filter_var($ip, FILTER_VALIDATE_IP);
-        return $ip ?: null;
+        return filter_var($ip, FILTER_VALIDATE_IP) ?: null;
     }
 }
