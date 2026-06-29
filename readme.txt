@@ -4,7 +4,7 @@ Tags: codici, sblocco, materiali, download, scuola, identity, sso
 Requires at least: 5.8
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.3.0
+Stable tag: 1.3.1
 License: GPLv2 or later
 
 Sblocco di aree riservate e materiali scaricabili tramite i codici stampati sui libri scolastici, integrato con Raffaello Identity (SSO).
@@ -46,6 +46,9 @@ Funzionalità (Ipotesi A — MVP):
 * Plugin **Raffaello Identity** per l'autenticazione SSO degli utenti.
 
 == Changelog ==
+
+= 1.3.1 =
+* Correzione urgente: disattivata l'integrazione "source.init" introdotta nella 1.3.0 (campo "Accesso materiali" per il gating di sezione), che causava un errore fatale durante il render front-end delle pagine YOOtheme. Il resto del plugin (materiali, codici, riscatti, download, elemento builder) torna a funzionare. Il gating di sezione verrà reintrodotto in una versione successiva, una volta corretta l'integrazione con la source di YOOtheme.
 
 = 1.3.0 =
 * Nuovo: integrazione con le Access Condition / Dynamic Condition di YOOtheme Pro. La source "Site" espone il campo booleano "Accesso materiali (pagina corrente)" (gruppo Codici Libro): permette di mostrare/nascondere intere sezioni del builder in base ai codici riscattati dall'utente per la pagina (gating di sezione lato server). Usare la condizione "non vuoto" per la sezione protetta e la condizione inversa per la sezione con il form [raffaello_codice]. Dopo l'aggiornamento aprire una volta il customizer YOOtheme per rigenerare lo schema.
