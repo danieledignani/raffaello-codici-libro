@@ -14,4 +14,14 @@ return [
 
     ],
 
+    // Estende la source "Site" con il campo booleano "Accesso materiali",
+    // usato dalle Access Condition / Dynamic Condition del builder per
+    // mostrare/nascondere intere sezioni in base ai codici riscattati
+    // dall'utente per la pagina corrente (gating di sezione).
+    'events' => [
+        'source.init' => [
+            \RaffaelloCodiciLibro\YooSource::class => ['init_source'],
+        ],
+    ],
+
 ];
