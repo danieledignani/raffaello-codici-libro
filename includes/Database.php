@@ -206,6 +206,53 @@ class Database
         }
     }
 
+    /**
+     * Restituisce un codice dalla forma normalizzata, creandolo (attivo, senza
+     * scadenza) se non esiste. Usato dal campo per-pagina, dove l'editor digita
+     * direttamente il codice del libro.
+     */
+    public static function find_or_create_code(string $codice_norm, ?string $descrizione = null): int
+    {
+        $existing = self::find_code($codice_norm);
+        if ($existing) {
+            return (int) $existing->id;
+        }
+        $res = self::insert_code($codice_norm, $descrizione, true, null);
+        return is_wp_error($res) ? 0 : (int) $res;
+    }
+
+    /** Restituisce i codici (id + stringa) che sbloccano un contenuto. */
+    public static function get_post_codes(int $post_id): array
+    {
+        global $wpdb;
+        $codice_post = self::table('codice_post');
+        $codici = self::table('codici');
+        return $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT c.id, c.codice
+                 FROM {$codice_post} cp
+                 JOIN {$codici} c ON c.id = cp.codice_id
+                 WHERE cp.post_id = %d
+                 ORDER BY c.codice ASC",
+                $post_id
+            )
+        );
+    }
+
+    /**
+     * Imposta i codici che sbloccano un contenuto, sostituendo solo i legami di
+     * QUESTO contenuto (non tocca gli altri contenuti collegati agli stessi codici).
+     */
+    public static function set_post_codes(int $post_id, array $code_ids): void
+    {
+        global $wpdb;
+        $table = self::table('codice_post');
+        $wpdb->delete($table, ['post_id' => $post_id], ['%d']);
+        foreach (array_unique(array_filter(array_map('intval', $code_ids))) as $codice_id) {
+            $wpdb->insert($table, ['codice_id' => $codice_id, 'post_id' => $post_id], ['%d', '%d']);
+        }
+    }
+
     /** Restituisce gli id dei contenuti sbloccati da un codice. */
     public static function get_code_posts(int $codice_id): array
     {

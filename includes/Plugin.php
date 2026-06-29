@@ -31,6 +31,7 @@ class Plugin
         (new Frontend())->register();
         (new Download())->register();
         (new Materials())->register();
+        (new CodeField())->register();
 
         if (is_admin()) {
             (new Admin())->register();

@@ -19,6 +19,7 @@ Funzionalità (Ipotesi A — MVP):
 * I materiali bloccati sono mostrati **in anteprima con stato "Bloccato"**; dopo lo sblocco diventano scaricabili.
 * **Download protetto**: i file non sono raggiungibili via URL diretto senza il relativo diritto.
 * Registrazione dell'abbinamento **codice ↔ utente** ad ogni riscatto (data, ora, IP).
+* **Campo per-pagina** (ACF se presente, altrimenti meta box nativo) per indicare direttamente sulla pagina i codici che la sbloccano; i codici nuovi vengono creati automaticamente.
 * Lo stesso codice è condiviso tra tutte le copie del libro e può sbloccare più contenuti; un contenuto può essere sbloccato da più codici.
 * Backoffice: gestione codici, associazione ai contenuti, import CSV, elenco riscatti.
 * Integrazione **YOOtheme Pro**: elemento builder "Materiali Codici Libro" (gruppo Raffaello), oltre allo shortcode.
@@ -27,10 +28,11 @@ Funzionalità (Ipotesi A — MVP):
 == Utilizzo ==
 
 1. Definire i materiali di una pagina dal meta box **"Materiali sbloccabili (Codici Libro)"**.
-2. Inserire lo shortcode `[raffaello_materiali]` nel contenuto (oppure `[raffaello_materiali post_id="123"]`).
-3. In alternativa allo shortcode, con YOOtheme Pro trascinare l'elemento **"Materiali Codici Libro"** (gruppo Raffaello) nel layout.
-4. Creare i codici da **Codici Libro → Codici** (o importarli via CSV) e associarli ai contenuti.
-5. Lo shortcode `[raffaello_codice]` mostra il solo form di inserimento (es. nell'area riservata).
+2. Indicare i codici che sbloccano la pagina nel campo **"Codici Libro — Sblocco"** (riquadro laterale dell'editor).
+3. Inserire lo shortcode `[raffaello_materiali]` nel contenuto (oppure `[raffaello_materiali post_id="123"]`).
+4. In alternativa allo shortcode, con YOOtheme Pro trascinare l'elemento **"Materiali Codici Libro"** (gruppo Raffaello) nel layout.
+5. In alternativa al campo per-pagina, i codici si possono creare/associare anche da **Codici Libro → Codici** (o importarli via CSV).
+6. Lo shortcode `[raffaello_codice]` mostra il solo form di inserimento (es. nell'area riservata).
 
 == Test su staging ==
 
@@ -44,6 +46,12 @@ Funzionalità (Ipotesi A — MVP):
 * Plugin **Raffaello Identity** per l'autenticazione SSO degli utenti.
 
 == Changelog ==
+
+= 1.2.0 =
+* Campo per-pagina (ACF o meta box nativo) per inserire i codici che sbloccano la pagina, con creazione automatica dei codici nuovi.
+
+= 1.1.0 =
+* Integrazione YOOtheme Pro (elemento builder "Materiali Codici Libro") e script di seed per staging.
 
 = 1.0.0 =
 * Prima versione: riscatto codici, sblocco contestuale materiali, download protetto, backoffice e import CSV.
