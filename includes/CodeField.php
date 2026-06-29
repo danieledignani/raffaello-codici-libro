@@ -94,7 +94,12 @@ class CodeField
         if (!current_user_can('edit_post', $post_id)) {
             return;
         }
-        $raw = function_exists('get_field') ? (string) get_field(self::META_KEY, $post_id) : '';
+        // Valore grezzo appena salvato da ACF (post meta con il nome del campo).
+        // NON usiamo get_field(): il filtro acf/load_value sostituisce sempre il
+        // valore con le associazioni già presenti nel DB, facendo perdere quanto
+        // digitato dall'editor. La nostra action è a priorità 20, quindi gira
+        // dopo che ACF (priorità 10) ha salvato i valori nel meta.
+        $raw = (string) get_post_meta($post_id, self::META_KEY, true);
         $this->sync_codes($post_id, $raw);
     }
 
