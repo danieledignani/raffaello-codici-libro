@@ -4,7 +4,7 @@ Tags: codici, sblocco, materiali, download, scuola, identity, sso
 Requires at least: 5.8
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.4.2
+Stable tag: 1.4.3
 License: GPLv2 or later
 
 Sblocco di aree riservate e materiali scaricabili tramite i codici stampati sui libri scolastici, integrato con Raffaello Identity (SSO).
@@ -46,6 +46,9 @@ Funzionalità (Ipotesi A — MVP):
 * Plugin **Raffaello Identity** per l'autenticazione SSO degli utenti.
 
 == Changelog ==
+
+= 1.4.3 =
+* Corretto (riservatezza): i contenuti bloccati non sono più leggibili, da chi non ha accesso, fuori dalla pagina stessa. Vale per le pagine con "Blocca l'intera pagina con il codice" attivo e almeno un codice associato e per i contenuti il cui layout YOOtheme usa la condizione "Accesso materiali (pagina corrente)". REST API (compresi elenchi, ricerca e tipi di contenuto personalizzati), feed, estratti (ricerca, archivi, embed), post inclusi in altre pagine (Query Loop) e campi Contenuto/Teaser dei layout YOOtheme mostrano "Contenuto riservato." al posto del testo; dalla REST spariscono anche note a piè di pagina e campi ACF. Prima la REST restituiva l'intero contenuto, compreso il layout YOOtheme con le sezioni nascoste. Come prima, vedono tutto gli amministratori e chi ha riscattato un codice valido; nell'editor a blocchi chi può modificare il contenuto lo riceve completo.
 
 = 1.4.2 =
 * Nuovo: sotto al campo "Codici Libro — Sblocco" della pagina viene ora mostrato un riepilogo in sola lettura dei codici associati, con il loro stato (Attivo / Scaduto / Disattivo) e un link per gestirli nel menu Codici Libro. Così si vede subito quali codici esistono e in che stato sono.

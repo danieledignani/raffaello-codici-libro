@@ -33,6 +33,7 @@ class Plugin
         (new Materials())->register();
         (new CodeField())->register();
         (new PageGate())->register();
+        (new ContentLock())->register();
 
         if (is_admin()) {
             (new Admin())->register();

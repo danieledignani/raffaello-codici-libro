@@ -10,10 +10,9 @@ if (!defined('ABSPATH')) {
  * Gating dell'intera pagina.
  *
  * Se sul contenuto è attivo l'interruttore "Blocca l'intera pagina con il
- * codice" (vedi CodeField) e l'utente corrente non ha accesso, al posto del
- * contenuto viene mostrato il form di sblocco. Gli amministratori vedono sempre
- * il contenuto (anteprima editoriale, tramite Codes::user_can_access). Il blocco
- * scatta solo se la pagina ha almeno un codice associato.
+ * codice" (vedi CodeField), la pagina ha almeno un codice associato e l'utente
+ * corrente non può vederla, al posto del contenuto viene mostrato il form di
+ * sblocco. La decisione è in ContentLock::of().
  */
 class PageGate
 {
@@ -33,23 +32,9 @@ class PageGate
             return;
         }
 
-        // Blocco pagina attivo per questo contenuto?
-        if (!get_post_meta($post_id, CodeField::META_BLOCK, true)) {
-            return;
+        if (ContentLock::of($post_id) === ContentLock::PAGE) {
+            $this->render_gate($post_id);
         }
-
-        // Senza codici associati non c'è nulla da sbloccare: nessun blocco.
-        if (empty(Database::get_post_codes($post_id))) {
-            return;
-        }
-
-        // Accesso consentito (utente abilitato o amministratore): pagina visibile.
-        $user_id = get_current_user_id();
-        if ($user_id && Codes::user_can_access($user_id, $post_id)) {
-            return;
-        }
-
-        $this->render_gate($post_id);
     }
 
     /** Mostra il form di sblocco al posto del contenuto della pagina. */

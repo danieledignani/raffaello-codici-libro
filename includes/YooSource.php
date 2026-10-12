@@ -30,6 +30,8 @@ if (!defined('ABSPATH')) {
  */
 class YooSource
 {
+    const FIELD = 'rcl_page_access';
+
     /**
      * Listener dell'evento "source.init": estende il tipo "Site".
      *
@@ -49,7 +51,7 @@ class YooSource
     {
         return [
             'fields' => [
-                'rcl_page_access' => [
+                self::FIELD => [
                     'type'     => 'Boolean',
                     'metadata' => [
                         'label'     => 'Accesso materiali (pagina corrente)',
@@ -77,5 +79,15 @@ class YooSource
         $post_id = (int) get_the_ID();
 
         return $post_id > 0 && Codes::user_can_access(get_current_user_id(), $post_id);
+    }
+
+    /**
+     * Vero se il layout YOOtheme del contenuto usa il campo. Il layout è un JSON
+     * nel post_content e ogni riferimento al campo ne riporta il nome, sia nelle
+     * condizioni di ZOOlanders Essentials sia nella Display Condition di YOOtheme.
+     */
+    public static function is_used_by(int $post_id): bool
+    {
+        return strpos(get_post_field('post_content', $post_id, 'raw'), self::FIELD) !== false;
     }
 }
