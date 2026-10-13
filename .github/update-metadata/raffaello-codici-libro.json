@@ -1,18 +1,18 @@
 {
-  "name": "Raffaello Codici Libro",
-  "version": "1.4.4",
-  "download_url": "https://github.com/danieledignani/raffaello-codici-libro/releases/download/1.4.4/raffaello-codici-libro.zip",
+  "name": "Raffaello Licenze",
+  "version": "1.5.0",
+  "download_url": "https://github.com/danieledignani/raffaello-codici-libro/releases/download/1.5.0/raffaello-codici-libro.zip",
   "homepage": "https://raffaellolibri.it",
   "requires": "5.8",
   "tested": "6.5",
   "requires_php": "7.4",
-  "last_updated": "2026-10-13 09:16:26",
+  "last_updated": "2026-10-13 13:58:13",
   "upgrade_notice": "Aggiornamento automatico da GitHub",
   "author": "Gruppo Raffaello",
   "author_homepage": "https://github.com/danieledignani",
   "sections": {
-    "description": "Sblocco di aree riservate e materiali scaricabili tramite i codici stampati sui libri scolastici, integrato con Raffaello Identity (SSO).",
+    "description": "Licenze di accesso a pagine, materiali scaricabili e corsi LearnDash: codici stampati sui libri e acquisti sul Bookshop attivati in automatico sul profilo di Raffaello Identity.",
     "installation": "Carica il plugin tramite il pannello 'Plugin > Aggiungi nuovo' o scompatta nella cartella wp-content/plugins/",
-    "changelog": "<li>Protegge davvero i file dei materiali: cartella dedicata, allegati privati e spostamento da admin</li>\n<li>Update JSON to version 1.4.3</li>"
+    "changelog": "<li>Licenze: acquisti dal Bookshop, attivazioni, LearnDash e pagina I miei contenuti</li>\n<li>Update JSON to version 1.4.4</li>"
   }
 }
