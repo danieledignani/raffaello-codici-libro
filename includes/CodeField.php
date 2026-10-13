@@ -7,40 +7,57 @@ if (!defined('ABSPATH')) {
 }
 
 /**
- * Campo per-pagina per indicare quali codici sbloccano il contenuto.
+ * Riquadro della pagina: licenze che la sbloccano e interruttore del blocco
+ * dell'intera pagina. Con ACF è un field group registrato via PHP, altrimenti un
+ * meta box nativo equivalente.
  *
- * Punto di ingresso "lato pagina": l'editor digita direttamente sulla pagina i
- * codici del libro che la sbloccano (come si aspetta chi lavora con ACF/YOOtheme).
- * Se ACF è attivo viene registrato un field group via PHP; altrimenti si usa un
- * meta box nativo equivalente. In entrambi i casi i codici vengono sincronizzati
- * con la tabella delle associazioni (rcl_codice_post), creando al volo i codici
- * non ancora presenti.
- *
- * Il valore mostrato riflette SEMPRE lo stato reale delle associazioni, così
- * resta coerente anche con i legami creati dal menu centrale "Codici Libro".
+ * Le licenze selezionate non si salvano nei meta della pagina: si scrivono e si
+ * leggono da rcl_licenza_post, l'unica fonte delle associazioni.
  */
 class CodeField
 {
-    const META_KEY = 'rcl_codici_sblocco';
+    const META_KEY = 'rcl_licenze_sblocco';
     const META_BLOCK = 'rcl_blocca_pagina';
 
     public function register(): void
     {
         if (function_exists('acf_add_local_field_group')) {
             add_action('acf/init', [$this, 'register_acf']);
-            add_filter('acf/load_value/name=' . self::META_KEY, [$this, 'acf_load_value'], 10, 3);
-            add_action('acf/save_post', [$this, 'acf_save'], 20);
-            add_filter('acf/prepare_field/key=field_rcl_codici_status', [$this, 'acf_prepare_status']);
+            add_filter('acf/load_field/key=field_rcl_licenze', [$this, 'acf_load_field']);
+            add_filter('acf/load_value/key=field_rcl_licenze', [$this, 'acf_load_value'], 10, 2);
+            add_filter('acf/pre_update_value', [$this, 'acf_pre_update_value'], 10, 4);
+            add_filter('acf/prepare_field/key=field_rcl_avviso', [$this, 'acf_prepare_notice']);
         } else {
             add_action('add_meta_boxes', [$this, 'add_meta_box']);
             add_action('save_post', [$this, 'save_native'], 20, 2);
         }
     }
 
-    /** Tipi di contenuto su cui mostrare il campo. */
+    /** Tipi di contenuto su cui mostrare il riquadro. */
     private function post_types(): array
     {
         return apply_filters('rcl_post_types', ['page', 'post']);
+    }
+
+    /** Licenze selezionabili: id => nome, segnando quelle disattivate. */
+    private static function choices(): array
+    {
+        $choices = [];
+        foreach (Licenses::all() as $l) {
+            $choices[(string) $l->id] = $l->nome . ((int) $l->attiva ? '' : ' ' . __('(disattivata)', 'raffaello-codici-libro'));
+        }
+        return $choices;
+    }
+
+    /** Avviso: pagina bloccata senza licenze, quindi visibile solo agli amministratori. */
+    private static function notice_html(int $post_id): string
+    {
+        if (!get_post_meta($post_id, self::META_BLOCK, true) || Licenses::of_post($post_id)) {
+            return '';
+        }
+        return '<p style="margin:6px 0;padding:6px 8px;border-left:4px solid #d63638;background:#fcf0f1;">'
+            . esc_html__('Pagina bloccata ma nessuna licenza la sblocca: la vedono solo gli amministratori.', 'raffaello-codici-libro')
+            . '</p>';
     }
 
     /* ----------------------------------------------------------------------
@@ -60,19 +77,20 @@ class CodeField
 
         acf_add_local_field_group([
             'key'      => 'group_rcl_codici_sblocco',
-            'title'    => __('Codici Libro — Sblocco', 'raffaello-codici-libro'),
+            'title'    => __('Raffaello Licenze', 'raffaello-codici-libro'),
             'fields'   => [[
-                'key'          => 'field_rcl_codici_sblocco',
-                'label'        => __('Codici che sbloccano questa pagina', 'raffaello-codici-libro'),
+                'key'          => 'field_rcl_licenze',
+                'label'        => __('Licenze che sbloccano questa pagina', 'raffaello-codici-libro'),
                 'name'         => self::META_KEY,
-                'type'         => 'textarea',
-                'rows'         => 4,
-                'new_lines'    => '',
-                'instructions' => __('Un codice del libro per riga (o separati da virgola). Chi riscatta uno di questi codici sblocca i materiali della pagina. I codici non ancora presenti vengono creati automaticamente.', 'raffaello-codici-libro'),
+                'type'         => 'select',
+                'multiple'     => 1,
+                'ui'           => 1,
+                'allow_null'   => 1,
+                'choices'      => [],
+                'instructions' => __('Chi ha una di queste licenze attiva sblocca i materiali della pagina.', 'raffaello-codici-libro'),
             ], [
-                // Riepilogo (sola lettura) dei codici associati con stato:
-                // popolato dinamicamente in acf_prepare_status().
-                'key'       => 'field_rcl_codici_status',
+                // Avviso per la pagina bloccata senza licenze: popolato in acf_prepare_notice().
+                'key'       => 'field_rcl_avviso',
                 'label'     => '',
                 'name'      => '',
                 'type'      => 'message',
@@ -81,11 +99,11 @@ class CodeField
                 'new_lines' => '',
             ], [
                 'key'          => 'field_rcl_blocca_pagina',
-                'label'        => __('Blocca l\'intera pagina con il codice', 'raffaello-codici-libro'),
+                'label'        => __('Blocca l\'intera pagina', 'raffaello-codici-libro'),
                 'name'         => self::META_BLOCK,
                 'type'         => 'true_false',
                 'ui'           => 1,
-                'instructions' => __('Se attivo, l\'intera pagina è accessibile solo a chi ha riscattato uno dei codici qui sopra; agli altri viene mostrato il form di sblocco al posto del contenuto.', 'raffaello-codici-libro'),
+                'instructions' => __('Se attivo, la pagina è accessibile solo a chi ha una delle licenze qui sopra; agli altri viene mostrato il form di sblocco al posto del contenuto. Senza licenze la vedono solo gli amministratori.', 'raffaello-codici-libro'),
             ]],
             'location'   => $location,
             'menu_order' => 0,
@@ -94,84 +112,35 @@ class CodeField
         ]);
     }
 
-    /** Mostra sempre i codici realmente collegati alla pagina (uno per riga). */
-    public function acf_load_value($value, $post_id, $field)
+    public function acf_load_field($field)
     {
-        $codici = Database::get_post_codes((int) $post_id);
-        if (empty($codici)) {
-            return '';
-        }
-        return implode("\n", wp_list_pluck($codici, 'codice'));
-    }
-
-    public function acf_save($post_id): void
-    {
-        $post_id = (int) $post_id;
-        if (!in_array(get_post_type($post_id), $this->post_types(), true)) {
-            return;
-        }
-        if (!current_user_can('edit_post', $post_id)) {
-            return;
-        }
-        // Valore grezzo appena salvato da ACF (post meta con il nome del campo).
-        // NON usiamo get_field(): il filtro acf/load_value sostituisce sempre il
-        // valore con le associazioni già presenti nel DB, facendo perdere quanto
-        // digitato dall'editor. La nostra action è a priorità 20, quindi gira
-        // dopo che ACF (priorità 10) ha salvato i valori nel meta.
-        $raw = (string) get_post_meta($post_id, self::META_KEY, true);
-        $this->sync_codes($post_id, $raw);
-    }
-
-    /** Popola dinamicamente il campo "message" col riepilogo dei codici associati. */
-    public function acf_prepare_status($field)
-    {
-        $post_id = isset($_GET['post']) ? (int) $_GET['post'] : 0;
-        $field['message'] = $post_id > 0 ? $this->codes_status_html($post_id) : '';
+        $field['choices'] = self::choices();
         return $field;
     }
 
-    /* ----------------------------------------------------------------------
-     * Riepilogo stato dei codici associati (sola lettura)
-     * -------------------------------------------------------------------- */
-
-    /** HTML della lista dei codici associati alla pagina con il loro stato. */
-    private function codes_status_html(int $post_id): string
+    /** Mostra sempre le licenze realmente collegate alla pagina. */
+    public function acf_load_value($value, $post_id)
     {
-        $codes = Database::get_post_codes_full($post_id);
-        if (empty($codes)) {
-            return '<p class="description" style="margin:6px 0 0;">'
-                . esc_html__('Nessun codice ancora associato a questa pagina.', 'raffaello-codici-libro')
-                . '</p>';
-        }
-
-        $out  = '<p class="description" style="margin:8px 0 4px;">' . esc_html__('Codici associati:', 'raffaello-codici-libro') . '</p>';
-        $out .= '<ul class="rcl-codici-stato" style="margin:0; padding:0; list-style:none;">';
-        foreach ($codes as $c) {
-            list($label, $color) = $this->code_status($c);
-            $edit_url = add_query_arg(
-                ['page' => 'rcl_codici', 'view' => 'edit', 'id' => (int) $c->id],
-                admin_url('admin.php')
-            );
-            $out .= '<li style="margin:3px 0; font-size:12px; line-height:1.5;">'
-                . '<code>' . esc_html($c->codice) . '</code> '
-                . '<span style="color:' . esc_attr($color) . '; font-weight:600;">' . esc_html($label) . '</span> '
-                . '<a href="' . esc_url($edit_url) . '" target="_blank" rel="noopener" style="text-decoration:none;">' . esc_html__('gestisci', 'raffaello-codici-libro') . ' &rsaquo;</a>'
-                . '</li>';
-        }
-        $out .= '</ul>';
-        return $out;
+        return is_numeric($post_id) ? array_map('strval', Licenses::of_post((int) $post_id)) : [];
     }
 
-    /** Etichetta + colore dello stato di un codice. */
-    private function code_status($code): array
+    /** Salva le licenze in rcl_licenza_post al posto del meta (che non si scrive). */
+    public function acf_pre_update_value($check, $value, $post_id, $field)
     {
-        if ((int) $code->attivo !== 1) {
-            return [__('Disattivo', 'raffaello-codici-libro'), '#b26a00'];
+        if (($field['key'] ?? '') !== 'field_rcl_licenze') {
+            return $check;
         }
-        if (!empty($code->data_scadenza) && strtotime($code->data_scadenza) < current_time('timestamp')) {
-            return [__('Scaduto', 'raffaello-codici-libro'), '#c62828'];
+        if (is_numeric($post_id) && !wp_is_post_revision((int) $post_id) && current_user_can('edit_post', (int) $post_id)) {
+            Licenses::set_post_licenses((int) $post_id, (array) $value);
         }
-        return [__('Attivo', 'raffaello-codici-libro'), '#2e7d32'];
+        return true;
+    }
+
+    public function acf_prepare_notice($field)
+    {
+        $post_id = isset($_GET['post']) ? (int) $_GET['post'] : 0;
+        $field['message'] = $post_id > 0 ? self::notice_html($post_id) : '';
+        return $field['message'] !== '' ? $field : false;
     }
 
     /* ----------------------------------------------------------------------
@@ -183,7 +152,7 @@ class CodeField
         foreach ($this->post_types() as $type) {
             add_meta_box(
                 'rcl_codici_sblocco',
-                __('Codici Libro — Sblocco', 'raffaello-codici-libro'),
+                __('Raffaello Licenze', 'raffaello-codici-libro'),
                 [$this, 'render_meta_box'],
                 $type,
                 'side',
@@ -194,63 +163,41 @@ class CodeField
 
     public function render_meta_box(\WP_Post $post): void
     {
-        wp_nonce_field('rcl_save_codici', 'rcl_codici_nonce');
-        $codici = Database::get_post_codes($post->ID);
-        $value = implode("\n", wp_list_pluck($codici, 'codice'));
+        wp_nonce_field('rcl_save_licenze', 'rcl_licenze_nonce');
+        $selected = Licenses::of_post($post->ID);
+        echo self::notice_html($post->ID);
         ?>
-        <p class="description">
-            <?php esc_html_e('Un codice del libro per riga. Chi riscatta uno di questi codici sblocca i materiali della pagina. I codici non ancora presenti vengono creati automaticamente.', 'raffaello-codici-libro'); ?>
-        </p>
-        <textarea name="<?php echo esc_attr(self::META_KEY); ?>" rows="4" style="width:100%;"><?php echo esc_textarea($value); ?></textarea>
-        <?php echo $this->codes_status_html($post->ID); ?>
+        <p><label for="rcl-licenze"><strong><?php esc_html_e('Licenze che sbloccano questa pagina', 'raffaello-codici-libro'); ?></strong></label></p>
+        <select id="rcl-licenze" name="rcl_licenze[]" multiple size="6" style="width:100%;">
+            <?php foreach (self::choices() as $id => $nome) : ?>
+                <option value="<?php echo esc_attr($id); ?>" <?php selected(in_array((int) $id, $selected, true)); ?>><?php echo esc_html($nome); ?></option>
+            <?php endforeach; ?>
+        </select>
+        <p class="description"><?php esc_html_e('Tieni premuto CTRL/CMD per selezionarne più di una.', 'raffaello-codici-libro'); ?></p>
         <p style="margin-top:10px;">
             <label>
                 <input type="checkbox" name="<?php echo esc_attr(self::META_BLOCK); ?>" value="1" <?php checked(get_post_meta($post->ID, self::META_BLOCK, true), '1'); ?> />
-                <?php esc_html_e('Blocca l\'intera pagina con il codice', 'raffaello-codici-libro'); ?>
+                <?php esc_html_e('Blocca l\'intera pagina', 'raffaello-codici-libro'); ?>
             </label>
         </p>
         <p class="description">
-            <?php esc_html_e('Se attivo, l\'intera pagina è accessibile solo a chi ha riscattato uno dei codici; agli altri viene mostrato il form di sblocco al posto del contenuto.', 'raffaello-codici-libro'); ?>
+            <?php esc_html_e('Se attivo, la pagina è accessibile solo a chi ha una delle licenze; agli altri viene mostrato il form di sblocco al posto del contenuto. Senza licenze la vedono solo gli amministratori.', 'raffaello-codici-libro'); ?>
         </p>
         <?php
     }
 
     public function save_native(int $post_id, \WP_Post $post): void
     {
-        if (!isset($_POST['rcl_codici_nonce']) || !wp_verify_nonce(wp_unslash($_POST['rcl_codici_nonce']), 'rcl_save_codici')) {
+        if (!isset($_POST['rcl_licenze_nonce']) || !wp_verify_nonce(wp_unslash($_POST['rcl_licenze_nonce']), 'rcl_save_licenze')) {
             return;
         }
-        if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) {
+        if ((defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) || wp_is_post_revision($post_id)) {
             return;
         }
         if (!current_user_can('edit_post', $post_id)) {
             return;
         }
-        $raw = isset($_POST[self::META_KEY]) ? (string) wp_unslash($_POST[self::META_KEY]) : '';
-        $this->sync_codes($post_id, $raw);
-
+        Licenses::set_post_licenses($post_id, isset($_POST['rcl_licenze']) ? (array) wp_unslash($_POST['rcl_licenze']) : []);
         update_post_meta($post_id, self::META_BLOCK, empty($_POST[self::META_BLOCK]) ? '0' : '1');
-    }
-
-    /* ----------------------------------------------------------------------
-     * Sincronizzazione
-     * -------------------------------------------------------------------- */
-
-    /** Converte il testo inserito in associazioni codice↔pagina. */
-    private function sync_codes(int $post_id, string $raw): void
-    {
-        $tokens = preg_split('/[\r\n,;]+/', $raw) ?: [];
-        $code_ids = [];
-        foreach ($tokens as $token) {
-            $norm = Database::normalize_code($token);
-            if ($norm === '') {
-                continue;
-            }
-            $id = Database::find_or_create_code($norm);
-            if ($id > 0) {
-                $code_ids[] = $id;
-            }
-        }
-        Database::set_post_codes($post_id, $code_ids);
     }
 }

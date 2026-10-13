@@ -7,15 +7,28 @@ if (!defined('ABSPATH')) {
 }
 
 /**
- * Frontend: shortcode dei materiali, form di sblocco contestuale, gestione
- * del riscatto (AJAX con fallback senza JavaScript) ed enqueue degli asset.
+ * Frontend: shortcode dei materiali, form di sblocco contestuale, pagina "I miei
+ * contenuti", riscatto (AJAX con fallback senza JavaScript) ed enqueue degli asset.
  */
 class Frontend
 {
+    /** Pagina con [raffaello_miei_contenuti], scelta nelle impostazioni. */
+    const OPTION_MIEI_CONTENUTI = 'rcl_pagina_miei_contenuti';
+
+    /** Query arg e transient dell'esito nel flusso senza JavaScript. */
+    const ESITO = 'rcl_esito';
+
+    /** L'esito è già nella pagina: si mostra una volta sola per richiesta. */
+    private $esito_mostrato = false;
+
     public function register(): void
     {
         add_shortcode('raffaello_materiali', [$this, 'shortcode_materiali']);
         add_shortcode('raffaello_codice', [$this, 'shortcode_form']);
+        add_shortcode('raffaello_miei_contenuti', [$this, 'shortcode_miei_contenuti']);
+        // Dopo gli shortcode (priorità 11), che mostrano l'esito vicino al form; senza loop, in fondo.
+        add_filter('the_content', [$this, 'esito_in_testa'], 12);
+        add_action('wp_footer', [$this, 'esito_flottante']);
 
         add_action('wp_enqueue_scripts', [$this, 'enqueue']);
 
@@ -63,6 +76,7 @@ class Frontend
         echo '<div class="rcl-materiali" data-post="' . esc_attr($post_id) . '">';
 
         if ($has_access) {
+            $this->render_esito();
             $this->render_unlocked($post_id, $materiali);
         } else {
             $this->render_locked($post_id, $materiali);
@@ -82,6 +96,23 @@ class Frontend
         echo '<div class="rcl-materiali">';
         $this->render_form((int) $post_id);
         echo '</div>';
+        return ob_get_clean();
+    }
+
+    /**
+     * Shortcode [raffaello_miei_contenuti]: licenze attive e non più attive
+     * dell'utente, con la scadenza e i link ai contenuti, e il form del codice.
+     */
+    public function shortcode_miei_contenuti($atts): string
+    {
+        ob_start();
+        echo '<div class="rcl-miei-contenuti">';
+        if (is_user_logged_in()) {
+            $this->render_licenses(get_current_user_id());
+        }
+        echo '<div class="rcl-materiali">';
+        $this->render_form((int) get_the_ID());
+        echo '</div></div>';
         return ob_get_clean();
     }
 
@@ -119,6 +150,61 @@ class Frontend
         $this->render_form($post_id);
     }
 
+    /** Licenze dell'utente: attive con scadenza e contenuti, poi scadute o sospese. */
+    private function render_licenses(int $user_id): void
+    {
+        $now = Database::now();
+        $licenze = [];
+        foreach (Activations::of_user($user_id) as $a) {
+            $l = $licenze[$a->licenza_id] ?? ['nome' => $a->nome, 'attiva' => (bool) (int) $a->attiva, 'illimitata' => false, 'scade_il' => ''];
+            if ($a->scade_il === null) {
+                $l['illimitata'] = true;
+            } elseif ($a->scade_il > $l['scade_il']) {
+                $l['scade_il'] = $a->scade_il;
+            }
+            $licenze[$a->licenza_id] = $l;
+        }
+
+        $attive = $altre = '';
+        foreach ($licenze as $licenza_id => $l) {
+            $valida = $l['attiva'] && ($l['illimitata'] || $l['scade_il'] > $now);
+            $item = '<li class="rcl-licenza"><strong>' . esc_html($l['nome']) . '</strong> <span class="rcl-licenza__stato">';
+            if ($valida) {
+                /* translators: %s: data */
+                $item .= esc_html($l['illimitata'] ? __('senza scadenza', 'raffaello-codici-libro') : sprintf(__('fino al %s', 'raffaello-codici-libro'), Codes::date($l['scade_il'])));
+                $item .= '</span>' . self::links_html((int) $licenza_id) . '</li>';
+                $attive .= $item;
+            } else {
+                /* translators: %s: data */
+                $item .= esc_html($l['attiva'] ? sprintf(__('scaduta il %s', 'raffaello-codici-libro'), Codes::date($l['scade_il'])) : __('sospesa', 'raffaello-codici-libro'));
+                $altre .= $item . '</span></li>';
+            }
+        }
+
+        if ($attive === '' && $altre === '') {
+            echo '<p class="rcl-miei-contenuti__vuoto">' . esc_html__('Non hai ancora licenze. Inserisci qui sotto il codice del tuo libro o quello ricevuto con l\'acquisto.', 'raffaello-codici-libro') . '</p>';
+            return;
+        }
+        if ($attive !== '') {
+            echo '<h3>' . esc_html__('Licenze attive', 'raffaello-codici-libro') . '</h3><ul class="rcl-licenze">' . $attive . '</ul>';
+        }
+        if ($altre !== '') {
+            echo '<h3>' . esc_html__('Licenze non più attive', 'raffaello-codici-libro') . '</h3><ul class="rcl-licenze rcl-licenze--scadute">' . $altre . '</ul>';
+        }
+    }
+
+    /** Contenuti pubblicati di una licenza, come elenco di link. */
+    private static function links_html(int $licenza_id): string
+    {
+        $html = '';
+        foreach (Licenses::posts($licenza_id) as $id) {
+            if (get_post_status($id) === 'publish') {
+                $html .= '<li><a href="' . esc_url(get_permalink($id)) . '">' . esc_html(get_the_title($id)) . '</a></li>';
+            }
+        }
+        return $html !== '' ? '<ul class="rcl-link-contenuti">' . $html . '</ul>' : '';
+    }
+
     /** Form di inserimento codice. */
     private function render_form(int $post_id): void
     {
@@ -146,7 +232,7 @@ class Frontend
             </label>
             <div class="rcl-form-row">
                 <input type="text" id="rcl-codice-<?php echo esc_attr($post_id); ?>" name="codice" class="rcl-input"
-                       placeholder="<?php esc_attr_e('Codice del libro', 'raffaello-codici-libro'); ?>"
+                       placeholder="<?php esc_attr_e('Codice del libro o dell\'acquisto', 'raffaello-codici-libro'); ?>"
                        autocomplete="off" required />
                 <button type="submit" class="rcl-button"><?php esc_html_e('Sblocca', 'raffaello-codici-libro'); ?></button>
             </div>
@@ -155,30 +241,84 @@ class Frontend
         <?php
     }
 
-    /** Mostra l'esito del riscatto nel flusso senza JavaScript (query arg rcl_esito). */
-    private function render_esito(): void
+    /**
+     * Esito del flusso senza JavaScript: lo stesso risultato dell'AJAX, salvato
+     * per pochi minuti e mostrato una volta sola per richiesta.
+     */
+    private function render_esito(string $classe = ''): void
     {
-        if (empty($_GET['rcl_esito'])) {
+        if ($this->esito_mostrato || empty($_GET[self::ESITO])) {
             return;
         }
-        $esito = sanitize_key(wp_unslash($_GET['rcl_esito']));
-        $map = [
-            'ok'              => ['ok', __('Contenuti sbloccati correttamente.', 'raffaello-codici-libro')],
-            'inesistente'     => ['ko', __('Codice non valido.', 'raffaello-codici-libro')],
-            'disattivato'     => ['ko', __('Questo codice non è più attivo.', 'raffaello-codici-libro')],
-            'scaduto'         => ['ko', __('Questo codice è scaduto.', 'raffaello-codici-libro')],
-            'vuoto'           => ['ko', __('Inserisci un codice.', 'raffaello-codici-libro')],
-            'senza_contenuti' => ['ko', __('Codice valido ma non collegato ad alcun contenuto.', 'raffaello-codici-libro')],
-            'nonce'           => ['ko', __('Sessione scaduta, riprova.', 'raffaello-codici-libro')],
-        ];
-        if (!isset($map[$esito])) {
+        $token = sanitize_key(wp_unslash($_GET[self::ESITO]));
+        if ($token === 'nonce') {
+            $this->esito_mostrato = true;
+            echo self::result_html(['success' => false, 'message' => __('Sessione scaduta, riprova.', 'raffaello-codici-libro'), 'links' => []], $classe);
             return;
         }
-        printf(
-            '<div class="rcl-message rcl-message--%s">%s</div>',
-            esc_attr($map[$esito][0]),
-            esc_html($map[$esito][1])
-        );
+        $key = self::ESITO . '_' . get_current_user_id() . '_' . $token;
+        $result = get_transient($key);
+        if (is_array($result)) {
+            $this->esito_mostrato = true;
+            delete_transient($key);
+            echo self::result_html($result, $classe);
+        }
+    }
+
+    /**
+     * Esito su una pagina che non mostra più il form, per esempio quella appena
+     * sbloccata: in testa al contenuto della pagina richiesta.
+     */
+    public function esito_in_testa($content)
+    {
+        // Solo il contenuto della pagina richiesta: non un estratto, non un post annidato (Query Loop).
+        if (!is_singular() || !in_the_loop() || !is_main_query() || doing_filter('get_the_excerpt')
+            || (int) get_the_ID() !== (int) get_queried_object_id()) {
+            return $content;
+        }
+        ob_start();
+        $this->render_esito();
+        return ob_get_clean() . $content;
+    }
+
+    /**
+     * Ripiego per le pagine senza loop (builder YOOtheme): l'esito non ancora
+     * mostrato in un riquadro fisso.
+     */
+    public function esito_flottante(): void
+    {
+        $this->render_esito('rcl-message--flottante');
+    }
+
+    /** HTML dell'esito, uguale per AJAX e invio senza JavaScript. */
+    public static function result_html(array $result, string $classe = ''): string
+    {
+        $html = '<p>' . esc_html($result['message']) . '</p>';
+        if ($result['success'] && $result['links']) {
+            $html .= '<p>' . esc_html__('Ora puoi accedere a:', 'raffaello-codici-libro') . '</p><ul class="rcl-link-contenuti">';
+            foreach ($result['links'] as $link) {
+                $html .= '<li><a href="' . esc_url($link['url']) . '">' . esc_html($link['title']) . '</a></li>';
+            }
+            $html .= '</ul>';
+        }
+        $page = (int) get_option(self::OPTION_MIEI_CONTENUTI);
+        if ($result['success'] && $page && get_post_status($page) === 'publish') {
+            $html .= '<p><a href="' . esc_url(get_permalink($page)) . '">' . esc_html__('Vedi tutti i tuoi contenuti', 'raffaello-codici-libro') . '</a></p>';
+        }
+        return '<div class="rcl-message rcl-message--' . ($result['success'] ? 'ok' : 'ko') . ($classe !== '' ? ' ' . $classe : '') . '" role="status" aria-live="polite">' . $html . '</div>';
+    }
+
+    /** Riscatto comune ad AJAX e POST: un errore del database diventa un messaggio. */
+    private function redeem(): array
+    {
+        $codice = isset($_POST['codice']) ? sanitize_text_field(wp_unslash($_POST['codice'])) : '';
+        $post_id = isset($_POST['post_id']) ? (int) $_POST['post_id'] : 0;
+        try {
+            return Codes::redeem($codice, get_current_user_id(), $post_id ?: null);
+        } catch (\Throwable $e) {
+            Log::error('Riscatto non riuscito (' . get_class($e) . ').', ['user_id' => get_current_user_id()]);
+            return ['success' => false, 'code' => 'errore', 'message' => __('Si è verificato un errore. Riprova.', 'raffaello-codici-libro'), 'post_ids' => [], 'links' => [], 'unlocks_current' => false];
+        }
     }
 
     /** Gestione del riscatto via AJAX. */
@@ -190,10 +330,8 @@ class Frontend
             wp_send_json_error(['message' => __('Devi effettuare l\'accesso.', 'raffaello-codici-libro')], 401);
         }
 
-        $codice = isset($_POST['codice']) ? sanitize_text_field(wp_unslash($_POST['codice'])) : '';
-        $post_id = isset($_POST['post_id']) ? (int) $_POST['post_id'] : 0;
-
-        $result = Codes::redeem($codice, get_current_user_id(), $post_id ?: null);
+        $result = $this->redeem();
+        $result['html'] = self::result_html($result);
 
         if ($result['success']) {
             wp_send_json_success($result);
@@ -201,14 +339,14 @@ class Frontend
         wp_send_json_error($result, 422);
     }
 
-    /** Gestione del riscatto senza JavaScript (redirect con esito). */
+    /** Gestione del riscatto senza JavaScript (redirect con l'esito). */
     public function post_redeem(): void
     {
         $post_id = isset($_POST['post_id']) ? (int) $_POST['post_id'] : 0;
         $redirect = $post_id ? get_permalink($post_id) : home_url('/');
 
         if (!isset($_POST['rcl_nonce']) || !wp_verify_nonce(wp_unslash($_POST['rcl_nonce']), 'rcl_redeem')) {
-            wp_safe_redirect(add_query_arg('rcl_esito', 'nonce', $redirect));
+            wp_safe_redirect(add_query_arg(self::ESITO, 'nonce', $redirect));
             exit;
         }
 
@@ -216,11 +354,9 @@ class Frontend
             auth_redirect();
         }
 
-        $codice = isset($_POST['codice']) ? sanitize_text_field(wp_unslash($_POST['codice'])) : '';
-        $result = Codes::redeem($codice, get_current_user_id(), $post_id ?: null);
-
-        $redirect = add_query_arg('rcl_esito', $result['success'] ? 'ok' : $result['code'], $redirect);
-        wp_safe_redirect($redirect);
+        $token = strtolower(wp_generate_password(12, false));
+        set_transient(self::ESITO . '_' . get_current_user_id() . '_' . $token, $this->redeem(), 5 * MINUTE_IN_SECONDS);
+        wp_safe_redirect(add_query_arg(self::ESITO, $token, $redirect));
         exit;
     }
 }

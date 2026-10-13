@@ -71,7 +71,7 @@ jobs:
 
           cat <<EOF > $JSON_PATH
           {
-            "name": "Raffaello Codici Libro",
+            "name": "Raffaello Licenze",
             "version": "$VERSION",
             "download_url": "https://github.com/danieledignani/raffaello-codici-libro/releases/download/$VERSION/raffaello-codici-libro.zip",
             "homepage": "https://raffaellolibri.it",
@@ -83,7 +83,7 @@ jobs:
             "author": "Gruppo Raffaello",
             "author_homepage": "https://github.com/danieledignani",
             "sections": {
-              "description": "Sblocco di aree riservate e materiali scaricabili tramite i codici stampati sui libri scolastici, integrato con Raffaello Identity (SSO).",
+              "description": "Licenze di accesso a pagine, materiali scaricabili e corsi LearnDash: codici stampati sui libri e acquisti sul Bookshop attivati in automatico sul profilo di Raffaello Identity.",
               "installation": "Carica il plugin tramite il pannello 'Plugin > Aggiungi nuovo' o scompatta nella cartella wp-content/plugins/",
               "changelog": $CHANGELOG
             }

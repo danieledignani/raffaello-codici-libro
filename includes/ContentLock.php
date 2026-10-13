@@ -10,11 +10,11 @@ if (!defined('ABSPATH')) {
  * Contenuti bloccati: decide chi li vede e li nasconde nei canali diversi dalla
  * pagina (REST, feed, estratti, oEmbed, elenchi, campi dinamici YOOtheme).
  *
- * Un contenuto è bloccato se ha il blocco pagina attivo con almeno un codice
- * associato (vedi PageGate) o se il suo layout YOOtheme usa il campo
+ * Un contenuto è bloccato se ha il blocco pagina attivo, anche senza licenze
+ * associate (vedi PageGate), o se il suo layout YOOtheme usa il campo
  * rcl_page_access (sezioni condizionate). Lo vedono gli amministratori e chi ha
- * l'accesso col codice, come per la pagina e le sezioni; nella REST in
- * context=edit anche chi può modificarlo.
+ * una licenza attiva che lo sblocca, come per la pagina e le sezioni; nella REST
+ * in context=edit anche chi può modificarlo.
  */
 class ContentLock
 {
@@ -45,7 +45,8 @@ class ContentLock
             return $cache[$key];
         }
 
-        if (get_post_meta($post_id, CodeField::META_BLOCK, true) && Database::get_post_codes($post_id)) {
+        // Interruttore attivo e nessuna licenza: resta bloccata per tutti tranne gli amministratori.
+        if (get_post_meta($post_id, CodeField::META_BLOCK, true)) {
             $lock = self::PAGE;
         } elseif (YooSource::is_used_by($post_id)) {
             $lock = self::SECTIONS;

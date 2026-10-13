@@ -9,10 +9,11 @@ if (!defined('ABSPATH')) {
 /**
  * Gating dell'intera pagina.
  *
- * Se sul contenuto è attivo l'interruttore "Blocca l'intera pagina con il
- * codice" (vedi CodeField), la pagina ha almeno un codice associato e l'utente
- * corrente non può vederla, al posto del contenuto viene mostrato il form di
- * sblocco. La decisione è in ContentLock::of().
+ * Se sul contenuto è attivo l'interruttore "Blocca l'intera pagina" (vedi
+ * CodeField) e l'utente corrente non ha una licenza che la sblocca, al posto del
+ * contenuto viene mostrato il form di sblocco. Senza licenze associate la pagina
+ * resta bloccata per tutti tranne gli amministratori. La decisione è in
+ * ContentLock::of().
  */
 class PageGate
 {

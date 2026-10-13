@@ -1,9 +1,9 @@
 <?php
 /**
- * Plugin Name: Raffaello Codici Libro
+ * Plugin Name: Raffaello Licenze
  * Plugin URI: https://raffaellolibri.it
- * Description: Sblocco di aree riservate e materiali scaricabili tramite i codici stampati sui libri scolastici. Integrato con Raffaello Identity (SSO). Mostra i materiali bloccati in anteprima con form di sblocco contestuale e registra l'abbinamento codice ↔ utente.
- * Version: 1.4.4
+ * Description: Licenze di accesso a pagine, materiali scaricabili e corsi LearnDash: codici stampati sui libri, acquisti sul Bookshop attivati in automatico sul profilo di Raffaello Identity, attivazioni manuali per l'assistenza.
+ * Version: 1.5.0
  * Author: Gruppo Raffaello
  * Text Domain: raffaello-codici-libro
  * Domain Path: /languages
@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('RCL_VERSION', '1.4.4');
+define('RCL_VERSION', '1.5.0');
 define('RCL_PLUGIN_FILE', __FILE__);
 define('RCL_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('RCL_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -44,10 +44,16 @@ spl_autoload_register(function ($class) {
     }
 });
 
-// Creazione/aggiornamento tabelle in fase di attivazione.
+// Creazione/aggiornamento tabelle in fase di attivazione; la versione avanza solo se riesce.
 register_activation_hook(__FILE__, function () {
-    \RaffaelloCodiciLibro\Database::create_tables();
-    add_option('rcl_db_version', RCL_VERSION);
+    if (\RaffaelloCodiciLibro\Database::create_tables()) {
+        update_option('rcl_db_version', RCL_VERSION);
+    }
+});
+
+// Il cron giornaliero delle scadenze si riprogramma alla riattivazione.
+register_deactivation_hook(__FILE__, function () {
+    wp_clear_scheduled_hook(\RaffaelloCodiciLibro\LearnDash::CRON);
 });
 
 // Avvio del plugin.

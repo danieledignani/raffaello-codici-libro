@@ -7,12 +7,16 @@ if (!defined('ABSPATH')) {
 }
 
 /**
- * Accesso ai dati: schema delle tabelle e query principali.
+ * Schema delle tabelle e accesso ai dati.
  *
- * Modello dati (Ipotesi A):
- * - rcl_codici        : i codici stampati sui libri (condivisi per edizione).
- * - rcl_codice_post   : associazione N–N tra codice e contenuti sbloccati.
- * - rcl_riscatti      : abbinamento codice ↔ utente registrato ad ogni riscatto.
+ * - rcl_licenze      : catalogo; lo SKU collega i prodotti del Bookshop.
+ * - rcl_licenza_post : contenuti sbloccati da ogni licenza (pagine, articoli, corsi).
+ * - rcl_codici       : codici stampati (condivisi) e acquistati (monouso, dal Bookshop).
+ * - rcl_attivazioni  : chi ha accesso a quale licenza e fino a quando. La colonna
+ *                      chiave (UNIQUE) rende atomici riscatti e assegnazioni.
+ *
+ * Le date delle colonne nuove sono in UTC. rcl_codice_post e rcl_riscatti sono le
+ * tabelle della 1.4: restano e le legge solo la migrazione.
  */
 class Database
 {
@@ -23,55 +27,288 @@ class Database
         return $wpdb->prefix . 'rcl_' . $name;
     }
 
-    /** Crea/aggiorna le tabelle del plugin tramite dbDelta. */
-    public static function create_tables(): void
+    /** Adesso in UTC, nel formato delle colonne DATETIME. */
+    public static function now(): string
+    {
+        return current_time('mysql', true);
+    }
+
+    /**
+     * Crea o aggiorna le tabelle, verifica lo schema e, arrivando dalla 1.4,
+     * migra i dati. Vero solo se tutto è riuscito: chi la chiama aggiorna
+     * rcl_db_version solo allora, altrimenti si riprova alla richiesta successiva
+     * (anche quando un'altra richiesta sta già migrando).
+     */
+    public static function create_tables(): bool
     {
         global $wpdb;
 
-        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-        $charset_collate = $wpdb->get_charset_collate();
+        if (!self::lock('rcl_migrazione', 0)) {
+            return false;
+        }
 
-        $codici = self::table('codici');
-        $codice_post = self::table('codice_post');
-        $riscatti = self::table('riscatti');
+        try {
+            require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+            $charset_collate = $wpdb->get_charset_collate();
 
-        $sql = [];
+            $licenze = self::table('licenze');
+            $licenza_post = self::table('licenza_post');
+            $codici = self::table('codici');
+            $attivazioni = self::table('attivazioni');
 
-        $sql[] = "CREATE TABLE {$codici} (
-            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-            codice VARCHAR(64) NOT NULL,
-            descrizione VARCHAR(255) NULL,
-            attivo TINYINT(1) NOT NULL DEFAULT 1,
-            data_scadenza DATETIME NULL DEFAULT NULL,
-            data_creazione DATETIME NOT NULL,
-            PRIMARY KEY  (id),
-            UNIQUE KEY codice (codice)
-        ) {$charset_collate};";
+            $sql = [];
 
-        $sql[] = "CREATE TABLE {$codice_post} (
-            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-            codice_id BIGINT UNSIGNED NOT NULL,
-            post_id BIGINT UNSIGNED NOT NULL,
-            PRIMARY KEY  (id),
-            UNIQUE KEY codice_post (codice_id, post_id),
-            KEY post_id (post_id)
-        ) {$charset_collate};";
+            $sql[] = "CREATE TABLE {$licenze} (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                nome VARCHAR(255) NOT NULL,
+                sku VARCHAR(100) NULL DEFAULT NULL,
+                durata_giorni INT UNSIGNED NULL DEFAULT NULL,
+                attiva TINYINT(1) NOT NULL DEFAULT 1,
+                data_creazione DATETIME NOT NULL,
+                data_modifica DATETIME NOT NULL,
+                PRIMARY KEY  (id),
+                UNIQUE KEY sku (sku)
+            ) {$charset_collate};";
 
-        $sql[] = "CREATE TABLE {$riscatti} (
-            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-            codice_id BIGINT UNSIGNED NOT NULL,
-            user_id BIGINT UNSIGNED NOT NULL,
-            data_riscatto DATETIME NOT NULL,
-            ip VARCHAR(45) NULL DEFAULT NULL,
-            PRIMARY KEY  (id),
-            UNIQUE KEY codice_user (codice_id, user_id),
-            KEY user_id (user_id)
-        ) {$charset_collate};";
+            $sql[] = "CREATE TABLE {$licenza_post} (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                licenza_id BIGINT UNSIGNED NOT NULL,
+                post_id BIGINT UNSIGNED NOT NULL,
+                PRIMARY KEY  (id),
+                UNIQUE KEY licenza_post (licenza_id,post_id),
+                KEY post_id (post_id)
+            ) {$charset_collate};";
 
-        foreach ($sql as $statement) {
-            dbDelta($statement);
+            // Sui siti che arrivano dalla 1.4 resta anche la vecchia colonna data_scadenza.
+            $sql[] = "CREATE TABLE {$codici} (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                codice VARCHAR(64) NOT NULL,
+                tipo VARCHAR(20) NOT NULL DEFAULT 'stampato',
+                licenza_id BIGINT UNSIGNED NULL DEFAULT NULL,
+                descrizione VARCHAR(255) NULL DEFAULT NULL,
+                attivo TINYINT(1) NOT NULL DEFAULT 1,
+                attivabile_fino DATETIME NULL DEFAULT NULL,
+                id_esterno BIGINT UNSIGNED NULL DEFAULT NULL,
+                ordine_id BIGINT UNSIGNED NULL DEFAULT NULL,
+                riga_ordine BIGINT UNSIGNED NULL DEFAULT NULL,
+                sku VARCHAR(100) NULL DEFAULT NULL,
+                destinatario_sub VARCHAR(64) NULL DEFAULT NULL,
+                scade_il DATETIME NULL DEFAULT NULL,
+                revocato_il DATETIME NULL DEFAULT NULL,
+                data_creazione DATETIME NOT NULL,
+                PRIMARY KEY  (id),
+                UNIQUE KEY codice (codice),
+                UNIQUE KEY id_esterno (id_esterno),
+                KEY licenza_id (licenza_id),
+                KEY ordine_id (ordine_id),
+                KEY sku (sku)
+            ) {$charset_collate};";
+
+            $sql[] = "CREATE TABLE {$attivazioni} (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                chiave VARCHAR(100) NOT NULL,
+                licenza_id BIGINT UNSIGNED NOT NULL,
+                user_id BIGINT UNSIGNED NULL DEFAULT NULL,
+                sub VARCHAR(64) NULL DEFAULT NULL,
+                codice_id BIGINT UNSIGNED NULL DEFAULT NULL,
+                origine VARCHAR(20) NOT NULL,
+                ordine_id BIGINT UNSIGNED NULL DEFAULT NULL,
+                scade_il DATETIME NULL DEFAULT NULL,
+                stato VARCHAR(20) NOT NULL DEFAULT 'attiva',
+                ip VARCHAR(45) NULL DEFAULT NULL,
+                data_creazione DATETIME NOT NULL,
+                data_modifica DATETIME NOT NULL,
+                PRIMARY KEY  (id),
+                UNIQUE KEY chiave (chiave),
+                KEY user_id (user_id),
+                KEY sub (sub),
+                KEY licenza_id (licenza_id),
+                KEY codice_id (codice_id),
+                KEY ordine_id (ordine_id)
+            ) {$charset_collate};";
+
+            foreach ($sql as $statement) {
+                dbDelta($statement);
+            }
+            foreach ($sql as $statement) {
+                if (!self::schema_ok($statement)) {
+                    Log::error('Schema incompleto dopo dbDelta: versione non aggiornata, si riprova alla prossima richiesta.');
+                    return false;
+                }
+            }
+
+            $from = get_option('rcl_db_version');
+            if ($from && version_compare($from, '1.5.0', '<')) {
+                Migration::run();
+            }
+            return true;
+        } catch (\Throwable $e) {
+            Log::error('Migrazione non riuscita (' . get_class($e) . '): si riprova alla prossima richiesta.');
+            return false;
+        } finally {
+            self::unlock('rcl_migrazione');
         }
     }
+
+    /**
+     * dbDelta non segnala gli errori: colonne e indici UNIQUE dello statement
+     * devono esistere davvero.
+     */
+    private static function schema_ok(string $statement): bool
+    {
+        global $wpdb;
+        preg_match('/CREATE TABLE (\S+)/', $statement, $table);
+        preg_match_all('/^\s*(\w+) (?:BIGINT|INT|TINYINT|VARCHAR|DATETIME)/m', $statement, $columns);
+        preg_match_all('/UNIQUE KEY \w+ \(([^)]+)\)/', $statement, $uniques);
+
+        if (array_diff($columns[1], $wpdb->get_col("SHOW COLUMNS FROM {$table[1]}"))) {
+            return false;
+        }
+        $have = [];
+        foreach ($wpdb->get_results("SHOW INDEX FROM {$table[1]}") as $index) {
+            if (!(int) $index->Non_unique) {
+                $have[$index->Key_name][(int) $index->Seq_in_index] = $index->Column_name;
+            }
+        }
+        foreach ($have as $key => $cols) {
+            ksort($cols);
+            $have[$key] = implode(',', $cols);
+        }
+        return !array_diff($uniques[1], $have);
+    }
+
+    /**
+     * Lock di MySQL per nome, atteso al massimo $wait secondi. È legato alla
+     * connessione: si rilascia da solo se il processo muore e nessun altro può
+     * toglierlo. Il nome ha il prefisso delle tabelle.
+     */
+    public static function lock(string $name, int $wait): bool
+    {
+        global $wpdb;
+        return (string) $wpdb->get_var($wpdb->prepare('SELECT GET_LOCK(%s, %d)', $wpdb->prefix . $name, $wait)) === '1';
+    }
+
+    public static function unlock(string $name): void
+    {
+        global $wpdb;
+        if ((string) $wpdb->get_var($wpdb->prepare('SELECT RELEASE_LOCK(%s)', $wpdb->prefix . $name)) !== '1') {
+            Log::warning('Lock non rilasciato: non era di questa connessione.', ['lock' => $name]);
+        }
+    }
+
+    /* ----------------------------------------------------------------------
+     * Query: un errore del database diventa un'eccezione, così l'endpoint
+     * risponde 500 invece di prendere decisioni su una lettura fallita. Il
+     * messaggio non riporta SQL né valori, che finirebbero nei log.
+     * -------------------------------------------------------------------- */
+
+    /** Query di scrittura: restituisce le righe toccate. */
+    public static function query(string $sql): int
+    {
+        global $wpdb;
+        $res = $wpdb->query($sql);
+        if ($res === false) {
+            throw new \RuntimeException('Errore del database');
+        }
+        return (int) $res;
+    }
+
+    public static function get_row(string $sql)
+    {
+        global $wpdb;
+        $row = $wpdb->get_row($sql);
+        self::check();
+        return $row;
+    }
+
+    public static function get_var(string $sql)
+    {
+        global $wpdb;
+        $var = $wpdb->get_var($sql);
+        self::check();
+        return $var;
+    }
+
+    public static function get_col(string $sql): array
+    {
+        global $wpdb;
+        $col = $wpdb->get_col($sql);
+        self::check();
+        return $col;
+    }
+
+    public static function get_results(string $sql): array
+    {
+        global $wpdb;
+        $rows = $wpdb->get_results($sql);
+        self::check();
+        return $rows;
+    }
+
+    private static function check(): void
+    {
+        global $wpdb;
+        if ($wpdb->last_error !== '') {
+            throw new \RuntimeException('Errore del database');
+        }
+    }
+
+    /** Valori per una query: NULL senza apici, interi come %d, il resto come %s. */
+    private static function values(array $data): string
+    {
+        global $wpdb;
+        $out = [];
+        foreach ($data as $value) {
+            $out[] = $value === null ? 'NULL' : $wpdb->prepare(is_int($value) ? '%d' : '%s', $value);
+        }
+        return implode(', ', $out);
+    }
+
+    /** INSERT: restituisce l'id della riga nuova. */
+    public static function insert(string $table, array $data): int
+    {
+        global $wpdb;
+        self::query('INSERT INTO ' . self::table($table) . ' (' . implode(', ', array_keys($data)) . ') VALUES (' . self::values($data) . ')');
+        return (int) $wpdb->insert_id;
+    }
+
+    /** INSERT IGNORE: 1 se la riga è nuova, 0 se un indice UNIQUE l'ha rifiutata. */
+    public static function insert_ignore(string $table, array $data): int
+    {
+        return self::query('INSERT IGNORE INTO ' . self::table($table) . ' (' . implode(', ', array_keys($data)) . ') VALUES (' . self::values($data) . ')');
+    }
+
+    /** UPDATE con valori e condizioni in uguaglianza (NULL compreso). */
+    public static function update(string $table, array $data, array $where): int
+    {
+        global $wpdb;
+        $set = [];
+        foreach ($data as $col => $value) {
+            $set[] = $col . ' = ' . self::values([$value]);
+        }
+        $cond = [];
+        foreach ($where as $col => $value) {
+            $cond[] = $value === null ? $col . ' IS NULL' : $col . ' = ' . self::values([$value]);
+        }
+        return self::query('UPDATE ' . self::table($table) . ' SET ' . implode(', ', $set) . ' WHERE ' . implode(' AND ', $cond));
+    }
+
+    /** Esegue $fn in una transazione (sulle tabelle InnoDB). */
+    public static function transaction(callable $fn): void
+    {
+        self::query('START TRANSACTION');
+        try {
+            $fn();
+            self::query('COMMIT');
+        } catch (\Throwable $e) {
+            self::query('ROLLBACK');
+            throw $e;
+        }
+    }
+
+    /* ----------------------------------------------------------------------
+     * Codici e accesso
+     * -------------------------------------------------------------------- */
 
     /**
      * Normalizza un codice per il confronto: maiuscolo e senza spazi/trattini.
@@ -87,271 +324,46 @@ class Database
     public static function find_code(string $codice_norm)
     {
         global $wpdb;
-        $table = self::table('codici');
-        return $wpdb->get_row(
-            $wpdb->prepare("SELECT * FROM {$table} WHERE codice = %s", $codice_norm)
-        );
+        return self::get_row($wpdb->prepare('SELECT * FROM ' . self::table('codici') . ' WHERE codice = %s', $codice_norm));
     }
 
     /** Recupera un codice dall'id. */
     public static function get_code(int $id)
     {
         global $wpdb;
-        $table = self::table('codici');
-        return $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE id = %d", $id));
+        return self::get_row($wpdb->prepare('SELECT * FROM ' . self::table('codici') . ' WHERE id = %d', $id));
     }
 
     /**
-     * Inserisce un nuovo codice. Restituisce l'id inserito o WP_Error
-     * se il codice esiste già.
+     * Condizioni di un'attivazione valida (alias a, licenza l, codice c in LEFT
+     * JOIN): attiva, non scaduta, licenza attiva, codice non revocato. Il codice
+     * revocato decide anche se una gara ha lasciato l'attivazione attiva.
      */
-    public static function insert_code(string $codice_norm, ?string $descrizione, bool $attivo, ?string $data_scadenza)
+    public static function valid_activation(): string
     {
-        global $wpdb;
-        $table = self::table('codici');
-
-        if (self::find_code($codice_norm)) {
-            return new \WP_Error('codice_duplicato', __('Codice già presente.', 'raffaello-codici-libro'));
-        }
-
-        $ok = $wpdb->insert(
-            $table,
-            [
-                'codice'         => $codice_norm,
-                'descrizione'    => $descrizione,
-                'attivo'         => $attivo ? 1 : 0,
-                'data_scadenza'  => $data_scadenza ?: null,
-                'data_creazione' => current_time('mysql'),
-            ],
-            ['%s', '%s', '%d', '%s', '%s']
-        );
-
-        return $ok ? (int) $wpdb->insert_id : new \WP_Error('insert_fallito', __('Inserimento non riuscito.', 'raffaello-codici-libro'));
-    }
-
-    /** Aggiorna i dati di un codice. */
-    public static function update_code(int $id, ?string $descrizione, bool $attivo, ?string $data_scadenza): void
-    {
-        global $wpdb;
-        $wpdb->update(
-            self::table('codici'),
-            [
-                'descrizione'   => $descrizione,
-                'attivo'        => $attivo ? 1 : 0,
-                'data_scadenza' => $data_scadenza ?: null,
-            ],
-            ['id' => $id],
-            ['%s', '%d', '%s'],
-            ['%d']
-        );
-    }
-
-    /** Elimina un codice e le associazioni/riscatti collegati. */
-    public static function delete_code(int $id): void
-    {
-        global $wpdb;
-        $wpdb->delete(self::table('codici'), ['id' => $id], ['%d']);
-        $wpdb->delete(self::table('codice_post'), ['codice_id' => $id], ['%d']);
-        $wpdb->delete(self::table('riscatti'), ['codice_id' => $id], ['%d']);
-    }
-
-    /** Elenco paginato dei codici, con conteggio riscatti. */
-    public static function list_codes(int $per_page = 50, int $offset = 0, string $search = ''): array
-    {
-        global $wpdb;
-        $codici = self::table('codici');
-        $riscatti = self::table('riscatti');
-
-        $where = '';
-        $params = [];
-        if ($search !== '') {
-            $where = 'WHERE c.codice LIKE %s OR c.descrizione LIKE %s';
-            $like = '%' . $wpdb->esc_like($search) . '%';
-            $params[] = $like;
-            $params[] = $like;
-        }
-
-        $sql = "SELECT c.*, (SELECT COUNT(*) FROM {$riscatti} r WHERE r.codice_id = c.id) AS riscatti
-                FROM {$codici} c {$where}
-                ORDER BY c.data_creazione DESC
-                LIMIT %d OFFSET %d";
-        $params[] = $per_page;
-        $params[] = $offset;
-
-        return $wpdb->get_results($wpdb->prepare($sql, $params));
-    }
-
-    /** Numero totale di codici (per la paginazione). */
-    public static function count_codes(string $search = ''): int
-    {
-        global $wpdb;
-        $codici = self::table('codici');
-        if ($search !== '') {
-            $like = '%' . $wpdb->esc_like($search) . '%';
-            return (int) $wpdb->get_var(
-                $wpdb->prepare("SELECT COUNT(*) FROM {$codici} WHERE codice LIKE %s OR descrizione LIKE %s", $like, $like)
-            );
-        }
-        return (int) $wpdb->get_var("SELECT COUNT(*) FROM {$codici}");
-    }
-
-    /** Imposta i contenuti (post id) sbloccati da un codice, sostituendo i precedenti. */
-    public static function set_code_posts(int $codice_id, array $post_ids): void
-    {
-        global $wpdb;
-        $table = self::table('codice_post');
-        $wpdb->delete($table, ['codice_id' => $codice_id], ['%d']);
-        foreach (array_unique(array_filter(array_map('intval', $post_ids))) as $post_id) {
-            $wpdb->insert($table, ['codice_id' => $codice_id, 'post_id' => $post_id], ['%d', '%d']);
-        }
+        return "a.stato = 'attiva' AND l.attiva = 1
+               AND (a.codice_id IS NULL OR c.revocato_il IS NULL)
+               AND (a.scade_il IS NULL OR a.scade_il > %s)";
     }
 
     /**
-     * Restituisce un codice dalla forma normalizzata, creandolo (attivo, senza
-     * scadenza) se non esiste. Usato dal campo per-pagina, dove l'editor digita
-     * direttamente il codice del libro.
-     */
-    public static function find_or_create_code(string $codice_norm, ?string $descrizione = null): int
-    {
-        $existing = self::find_code($codice_norm);
-        if ($existing) {
-            return (int) $existing->id;
-        }
-        $res = self::insert_code($codice_norm, $descrizione, true, null);
-        return is_wp_error($res) ? 0 : (int) $res;
-    }
-
-    /** Restituisce i codici (id + stringa) che sbloccano un contenuto. */
-    public static function get_post_codes(int $post_id): array
-    {
-        global $wpdb;
-        $codice_post = self::table('codice_post');
-        $codici = self::table('codici');
-        return $wpdb->get_results(
-            $wpdb->prepare(
-                "SELECT c.id, c.codice
-                 FROM {$codice_post} cp
-                 JOIN {$codici} c ON c.id = cp.codice_id
-                 WHERE cp.post_id = %d
-                 ORDER BY c.codice ASC",
-                $post_id
-            )
-        );
-    }
-
-    /** Come get_post_codes, ma con tutti i campi del codice (per mostrare lo stato). */
-    public static function get_post_codes_full(int $post_id): array
-    {
-        global $wpdb;
-        $codice_post = self::table('codice_post');
-        $codici = self::table('codici');
-        return $wpdb->get_results(
-            $wpdb->prepare(
-                "SELECT c.*
-                 FROM {$codice_post} cp
-                 JOIN {$codici} c ON c.id = cp.codice_id
-                 WHERE cp.post_id = %d
-                 ORDER BY c.codice ASC",
-                $post_id
-            )
-        );
-    }
-
-    /**
-     * Imposta i codici che sbloccano un contenuto, sostituendo solo i legami di
-     * QUESTO contenuto (non tocca gli altri contenuti collegati agli stessi codici).
-     */
-    public static function set_post_codes(int $post_id, array $code_ids): void
-    {
-        global $wpdb;
-        $table = self::table('codice_post');
-        $wpdb->delete($table, ['post_id' => $post_id], ['%d']);
-        foreach (array_unique(array_filter(array_map('intval', $code_ids))) as $codice_id) {
-            $wpdb->insert($table, ['codice_id' => $codice_id, 'post_id' => $post_id], ['%d', '%d']);
-        }
-    }
-
-    /** Restituisce gli id dei contenuti sbloccati da un codice. */
-    public static function get_code_posts(int $codice_id): array
-    {
-        global $wpdb;
-        $table = self::table('codice_post');
-        return array_map('intval', $wpdb->get_col(
-            $wpdb->prepare("SELECT post_id FROM {$table} WHERE codice_id = %d", $codice_id)
-        ));
-    }
-
-    /**
-     * Registra il riscatto di un codice da parte di un utente.
-     * La chiave univoca (codice_id, user_id) rende l'operazione idempotente.
-     */
-    public static function record_redemption(int $codice_id, int $user_id, ?string $ip): void
-    {
-        global $wpdb;
-        $wpdb->query(
-            $wpdb->prepare(
-                "INSERT IGNORE INTO " . self::table('riscatti') . " (codice_id, user_id, data_riscatto, ip)
-                 VALUES (%d, %d, %s, %s)",
-                $codice_id,
-                $user_id,
-                current_time('mysql'),
-                $ip
-            )
-        );
-    }
-
-    /**
-     * Verifica se l'utente ha accesso a un contenuto: deve esistere un riscatto
-     * dell'utente per un codice attivo e non scaduto collegato a quel contenuto.
+     * Accesso a un contenuto: un'attivazione valida dell'utente di una licenza
+     * che contiene il contenuto.
      */
     public static function user_has_access(int $user_id, int $post_id): bool
     {
         global $wpdb;
-        $riscatti = self::table('riscatti');
-        $codice_post = self::table('codice_post');
-        $codici = self::table('codici');
-
-        $found = $wpdb->get_var(
-            $wpdb->prepare(
-                "SELECT 1
-                 FROM {$riscatti} r
-                 JOIN {$codice_post} cp ON cp.codice_id = r.codice_id
-                 JOIN {$codici} c ON c.id = r.codice_id
-                 WHERE r.user_id = %d AND cp.post_id = %d
-                   AND c.attivo = 1
-                   AND (c.data_scadenza IS NULL OR c.data_scadenza >= %s)
-                 LIMIT 1",
-                $user_id,
-                $post_id,
-                current_time('mysql')
-            )
-        );
-
-        return (bool) $found;
-    }
-
-    /** Elenco paginato dei riscatti con dati di codice e utente. */
-    public static function list_redemptions(int $per_page = 50, int $offset = 0): array
-    {
-        global $wpdb;
-        $riscatti = self::table('riscatti');
-        $codici = self::table('codici');
-        $users = $wpdb->users;
-
-        $sql = "SELECT r.*, c.codice, u.user_login, u.user_email
-                FROM {$riscatti} r
-                JOIN {$codici} c ON c.id = r.codice_id
-                LEFT JOIN {$users} u ON u.ID = r.user_id
-                ORDER BY r.data_riscatto DESC
-                LIMIT %d OFFSET %d";
-
-        return $wpdb->get_results($wpdb->prepare($sql, $per_page, $offset));
-    }
-
-    /** Numero totale di riscatti. */
-    public static function count_redemptions(): int
-    {
-        global $wpdb;
-        return (int) $wpdb->get_var("SELECT COUNT(*) FROM " . self::table('riscatti'));
+        return (bool) self::get_var($wpdb->prepare(
+            'SELECT 1
+             FROM ' . self::table('attivazioni') . ' a
+             JOIN ' . self::table('licenze') . ' l ON l.id = a.licenza_id
+             JOIN ' . self::table('licenza_post') . ' lp ON lp.licenza_id = a.licenza_id
+             LEFT JOIN ' . self::table('codici') . ' c ON c.id = a.codice_id
+             WHERE a.user_id = %d AND lp.post_id = %d AND ' . self::valid_activation() . '
+             LIMIT 1',
+            $user_id,
+            $post_id,
+            self::now()
+        ));
     }
 }

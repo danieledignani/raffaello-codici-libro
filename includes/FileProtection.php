@@ -49,6 +49,12 @@ class FileProtection
         add_action('admin_post_rcl_ricontrolla', [$this, 'recheck']);
         add_filter('removable_query_args', [$this, 'removable_query_args']);
 
+        // Filtro "Materiali protetti" della libreria media: vista elenco, griglia e modal.
+        add_filter('views_upload', [$this, 'media_view']);
+        add_action('pre_get_posts', [$this, 'media_list_query']);
+        add_filter('ajax_query_attachments_args', [$this, 'media_grid_query']);
+        add_action('wp_enqueue_media', [$this, 'media_filter_script']);
+
         if (self::is_material_upload()) {
             // Il filtro upload_dir lo toglie after_upload. Se l'upload fallisce resta attivo, ma solo per
             // il resto di questa richiesta, che serve un solo upload e finisce con l'errore in JSON.
@@ -540,6 +546,62 @@ class FileProtection
     public function removable_query_args($args)
     {
         return array_merge($args, self::RESULT_ARGS);
+    }
+
+    /** Vista "Materiali protetti" nella libreria media in modalità elenco. */
+    public function media_view($views)
+    {
+        if (!current_user_can('read_private_posts')) {
+            return $views;
+        }
+        global $wpdb;
+        $count = (int) $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key = '_wp_attached_file' AND meta_value LIKE %s",
+            $wpdb->esc_like(self::DIR . '/') . '%'
+        ));
+        $views[self::DIR] = sprintf(
+            '<a href="%s"%s>%s <span class="count">(%d)</span></a>',
+            esc_url(admin_url('upload.php?mode=list&' . self::DIR . '=1')),
+            empty($_GET[self::DIR]) ? '' : ' class="current" aria-current="page"',
+            esc_html__('Materiali protetti', 'raffaello-codici-libro'),
+            $count
+        );
+        return $views;
+    }
+
+    /** Elenco della libreria media ristretto ai file nella cartella protetta. */
+    public function media_list_query($query): void
+    {
+        global $pagenow;
+        if (is_admin() && $pagenow === 'upload.php' && $query->is_main_query() && !empty($_GET[self::DIR])) {
+            $query->set('meta_query', [self::media_meta_clause()]);
+        }
+    }
+
+    /** Griglia e modal: la voce "Materiali protetti" del filtro manda rcl_materiali nella query AJAX. */
+    public function media_grid_query($args)
+    {
+        if (!empty($_REQUEST['query'][self::DIR])) {
+            $args['meta_query'] = [self::media_meta_clause()];
+        }
+        return $args;
+    }
+
+    /** Aggiunge la voce al filtro della griglia e dei modal, per chi vede gli allegati privati. */
+    public function media_filter_script(): void
+    {
+        if (!current_user_can('read_private_posts')) {
+            return;
+        }
+        wp_enqueue_script('rcl-media-filtro', RCL_PLUGIN_URL . 'assets/js/admin-media-filtro.js', ['media-views'], RCL_VERSION, true);
+        wp_localize_script('rcl-media-filtro', 'rclMediaFiltro', [
+            'label' => __('Materiali protetti', 'raffaello-codici-libro'),
+        ]);
+    }
+
+    private static function media_meta_clause(): array
+    {
+        return ['key' => '_wp_attached_file', 'value' => self::DIR . '/', 'compare' => 'LIKE'];
     }
 
     private static function print_notice(string $type, string $text): void

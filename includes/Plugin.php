@@ -35,6 +35,9 @@ class Plugin
         (new CodeField())->register();
         (new PageGate())->register();
         (new ContentLock())->register();
+        (new Activations())->register();
+        (new Push())->register();
+        (new LearnDash())->register();
 
         if (is_admin()) {
             (new Admin())->register();
@@ -53,11 +56,10 @@ class Plugin
         \YOOtheme\Application::getInstance()->load(RCL_PLUGIN_DIR . 'yootheme-customization/bootstrap.php');
     }
 
-    /** Esegue dbDelta se la versione DB salvata è diversa da quella corrente. */
+    /** Schema e migrazione se la versione salvata è diversa; la versione avanza solo se riescono. */
     private function maybe_upgrade_db(): void
     {
-        if (get_option('rcl_db_version') !== RCL_VERSION) {
-            Database::create_tables();
+        if (get_option('rcl_db_version') !== RCL_VERSION && Database::create_tables()) {
             update_option('rcl_db_version', RCL_VERSION);
         }
     }

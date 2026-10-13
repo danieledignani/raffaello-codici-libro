@@ -2,9 +2,10 @@
 /**
  * Seed di dati di prova per Raffaello Codici Libro — SOLO per ambienti di staging/test.
  *
- * Crea una pagina di esempio con materiali scaricabili e alcuni codici di prova
- * (validi e scaduto) già associati alla pagina, così da provare l'intero flusso:
- * anteprima bloccata → inserimento codice → sblocco → download protetto.
+ * Crea una pagina di esempio con materiali scaricabili, una licenza di prova che
+ * la sblocca e alcuni codici stampati (validi e scaduto) della licenza, così da
+ * provare l'intero flusso: anteprima bloccata → inserimento codice → sblocco →
+ * download protetto.
  *
  * Uso:
  *   wp eval-file tools/seed.php             (consigliato, se WP-CLI è disponibile)
@@ -47,12 +48,14 @@ if (!class_exists('RaffaelloCodiciLibro\\Database')) {
 
 use RaffaelloCodiciLibro\Database;
 use RaffaelloCodiciLibro\FileProtection;
+use RaffaelloCodiciLibro\Licenses;
 use RaffaelloCodiciLibro\Materials;
 
 $argv = isset($argv) ? $argv : [];
 $remove = in_array('--remove', $argv, true);
 
 const RCL_SEED_PAGE_OPTION = 'rcl_seed_page_id';
+const RCL_SEED_LICENSE_OPTION = 'rcl_seed_licenza_id';
 const RCL_SEED_CODE_PREFIX = 'DEMO';
 
 /** Scrive un messaggio a console (compatibile WP-CLI e php). */
@@ -71,17 +74,16 @@ function rcl_seed_log(string $msg): void
 if ($remove) {
     global $wpdb;
 
-    // Elimina i codici di seed (prefisso DEMO) e relativi riscatti/associazioni.
-    $codici = $wpdb->get_results(
-        $wpdb->prepare(
-            "SELECT id FROM " . Database::table('codici') . " WHERE codice LIKE %s",
-            $wpdb->esc_like(RCL_SEED_CODE_PREFIX) . '%'
-        )
-    );
-    foreach ($codici as $c) {
-        Database::delete_code((int) $c->id);
+    // Elimina la licenza di seed con i suoi codici (prefisso DEMO) e attivazioni.
+    $licenza_id = (int) get_option(RCL_SEED_LICENSE_OPTION);
+    $n = $wpdb->query($wpdb->prepare("DELETE FROM " . Database::table('codici') . " WHERE codice LIKE %s", $wpdb->esc_like(RCL_SEED_CODE_PREFIX) . '%'));
+    if ($licenza_id) {
+        $wpdb->delete(Database::table('attivazioni'), ['licenza_id' => $licenza_id]);
+        $wpdb->delete(Database::table('licenza_post'), ['licenza_id' => $licenza_id]);
+        $wpdb->delete(Database::table('licenze'), ['id' => $licenza_id]);
+        delete_option(RCL_SEED_LICENSE_OPTION);
     }
-    rcl_seed_log(sprintf('Rimossi %d codici di seed.', count($codici)));
+    rcl_seed_log(sprintf('Rimossi %d codici di seed e la licenza di prova.', (int) $n));
 
     // Elimina la pagina di esempio e i suoi allegati.
     $page_id = (int) get_option(RCL_SEED_PAGE_OPTION);
@@ -159,29 +161,26 @@ foreach ($esempi as $i => $e) {
 update_post_meta($page_id, Materials::META_KEY, $materiali);
 rcl_seed_log('Associati ' . count($materiali) . ' materiali alla pagina.');
 
-// 3) Codici di prova: due validi + uno scaduto, tutti collegati alla pagina.
-$oggi = current_time('Y-m-d');
+// 3) Licenza di prova che sblocca la pagina, con due codici validi e uno scaduto.
+$licenza_id = (int) get_option(RCL_SEED_LICENSE_OPTION);
+$licenza_id = Licenses::save(Licenses::get($licenza_id) ? $licenza_id : 0, 'Licenza demo — Codici Libro', null, null, true, [$page_id]);
+update_option(RCL_SEED_LICENSE_OPTION, $licenza_id);
+
 $codici_seed = [
-    ['codice' => RCL_SEED_CODE_PREFIX . '-1234', 'descrizione' => 'Codice demo valido 1', 'scadenza' => null],
-    ['codice' => RCL_SEED_CODE_PREFIX . '-5678', 'descrizione' => 'Codice demo valido 2', 'scadenza' => null],
-    ['codice' => RCL_SEED_CODE_PREFIX . '-SCAD', 'descrizione' => 'Codice demo SCADUTO',  'scadenza' => '2020-01-01 00:00:00'],
+    ['codice' => RCL_SEED_CODE_PREFIX . '-1234', 'descrizione' => 'Codice demo valido 1', 'fino' => null],
+    ['codice' => RCL_SEED_CODE_PREFIX . '-5678', 'descrizione' => 'Codice demo valido 2', 'fino' => null],
+    ['codice' => RCL_SEED_CODE_PREFIX . '-SCAD', 'descrizione' => 'Codice demo SCADUTO',  'fino' => '2020-01-01 00:00:00'],
 ];
 
 $creati = [];
 foreach ($codici_seed as $cs) {
     $norm = Database::normalize_code($cs['codice']);
-    $existing = Database::find_code($norm);
-    if ($existing) {
-        $id = (int) $existing->id;
-    } else {
-        $res = Database::insert_code($norm, $cs['descrizione'], true, $cs['scadenza']);
-        if (is_wp_error($res)) {
-            rcl_seed_log('  ! Salto ' . $cs['codice'] . ': ' . $res->get_error_message());
-            continue;
-        }
-        $id = (int) $res;
-    }
-    Database::set_code_posts($id, [$page_id]);
+    Database::insert_ignore('codici', [
+        'codice'          => $norm,
+        'tipo'            => 'stampato',
+        'data_creazione'  => Database::now(),
+    ]);
+    Database::update('codici', ['licenza_id' => $licenza_id, 'descrizione' => $cs['descrizione'], 'attivabile_fino' => $cs['fino']], ['codice' => $norm]);
     $creati[] = $cs['codice'];
 }
 

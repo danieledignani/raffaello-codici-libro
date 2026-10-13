@@ -1,4 +1,4 @@
-/* Raffaello Codici Libro — riscatto via AJAX con ricaricamento al successo. */
+/* Raffaello Licenze — riscatto via AJAX con ricaricamento al successo. */
 (function ($) {
     'use strict';
 
@@ -10,13 +10,23 @@
         e.preventDefault();
 
         var $form = $(this);
-        var $msg = $form.find('.rcl-message');
         var $btn = $form.find('button[type="submit"]');
         var codice = $form.find('input[name="codice"]').val();
         var postId = $form.find('input[name="post_id"]').val();
 
+        // L'esito arriva già in HTML dal server, uguale a quello del flusso senza JavaScript.
+        function show(data) {
+            var $msg = $form.find('.rcl-message');
+            if (data && data.html) {
+                $msg.replaceWith(data.html);
+            } else {
+                $msg.removeClass('rcl-message--ok').addClass('rcl-message--ko')
+                    .text(data && data.message ? data.message : rclData.i18n.error);
+            }
+        }
+
         $btn.prop('disabled', true);
-        $msg.removeClass('rcl-message--ok rcl-message--ko').text('');
+        $form.find('.rcl-message').removeClass('rcl-message--ok rcl-message--ko').text('');
 
         $.ajax({
             url: rclData.ajaxUrl,
@@ -29,24 +39,14 @@
                 post_id: postId
             }
         }).done(function (res) {
-            if (res && res.success) {
-                $msg.addClass('rcl-message--ok').text(res.data.message);
-                // Se sblocca il contenuto corrente, ricarica per mostrare i download.
-                if (res.data.unlocks_current) {
-                    window.location.reload();
-                }
-            } else {
-                var m = (res && res.data && res.data.message) ? res.data.message : rclData.i18n.error;
-                $msg.addClass('rcl-message--ko').text(m);
+            show(res ? res.data : null);
+            // Se sblocca il contenuto corrente, ricarica per mostrarlo.
+            if (res && res.success && res.data.unlocks_current) {
+                window.location.reload();
             }
         }).fail(function (jqXHR) {
-            // Gli errori di validazione arrivano con stato HTTP 422/401: il messaggio
-            // specifico (es. "Codice non valido") è nel corpo JSON in data.message.
-            // Lo mostriamo, con fallback al messaggio generico se manca il corpo
-            // (es. errore di rete o risposta non JSON).
-            var data = (jqXHR && jqXHR.responseJSON) ? jqXHR.responseJSON.data : null;
-            var m = (data && data.message) ? data.message : rclData.i18n.error;
-            $msg.addClass('rcl-message--ko').text(m);
+            // Gli esiti negativi arrivano con stato HTTP 422/401 e il corpo JSON in data.
+            show(jqXHR && jqXHR.responseJSON ? jqXHR.responseJSON.data : null);
         }).always(function () {
             $btn.prop('disabled', false);
         });
