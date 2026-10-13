@@ -30,6 +30,7 @@ class Plugin
 
         (new Frontend())->register();
         (new Download())->register();
+        (new FileProtection())->register();
         (new Materials())->register();
         (new CodeField())->register();
         (new PageGate())->register();

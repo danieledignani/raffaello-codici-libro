@@ -4,7 +4,7 @@ Tags: codici, sblocco, materiali, download, scuola, identity, sso
 Requires at least: 5.8
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.4.3
+Stable tag: 1.4.4
 License: GPLv2 or later
 
 Sblocco di aree riservate e materiali scaricabili tramite i codici stampati sui libri scolastici, integrato con Raffaello Identity (SSO).
@@ -44,8 +44,17 @@ Funzionalità (Ipotesi A — MVP):
 
 * WordPress 5.8+, PHP 7.4+
 * Plugin **Raffaello Identity** per l'autenticazione SSO degli utenti.
+* Con nginx (che ignora il .htaccess) una regola che neghi l'accesso diretto a wp-content/uploads/rcl_materiali/: se manca, il plugin mostra agli amministratori la regola da aggiungere.
 
 == Changelog ==
+
+= 1.4.4 =
+* Corretto: i file dei materiali ora sono davvero protetti. Prima passava dal plugin solo il link di download: il file restava in uploads con un indirizzo pubblico, scaricabile da chiunque anche senza codice ed elencato in /wp-json/wp/v2/media e nella pagina allegato. Ora i file caricati dal riquadro "Materiali sbloccabili" finiscono in wp-content/uploads/rcl_materiali, chiusa da un .htaccess di diniego (Apache 2.2 e 2.4), senza anteprime né miniature, e si scaricano solo dalla pagina dopo lo sblocco.
+* Gli allegati dei materiali sono privati: non compaiono nella REST pubblica dei media e non hanno una pagina allegato pubblica. Amministratori e redattori li vedono nella libreria media; gli autori no, perché WordPress richiede il permesso read_private_posts.
+* Dalla libreria media si possono aggiungere solo file già protetti che l'utente può modificare: un file pubblico, o di un altro utente, scelto dalla libreria viene scartato al salvataggio, con un avviso che dice di caricarlo dal riquadro. I materiali già salvati restano.
+* Nuovo: per i materiali salvati prima di questa versione gli amministratori trovano in bacheca il pulsante "Proteggi i file dei materiali". Lo spostamento mantiene il percorso (2023/01/manuale.pdf diventa rcl_materiali/2023/01/manuale.pdf), sposta insieme al file anche anteprime, miniature, originale non scalato e backup delle immagini modificate, così si può sempre tornare indietro (nella libreria le loro anteprime non si vedono più: la cartella risponde 403), e riferisce quanti file sono riusciti e quanti no; quelli non riusciti restano al loro posto e si possono ritentare. I materiali il cui file non si trova su disco compaiono nell'avviso come da verificare. Gli indirizzi diretti dei file spostati smettono di funzionare, anche dove erano usati fuori dai materiali: dopo lo spostamento conviene svuotare la cache della CDN.
+* Nuovo: controllo di salute giornaliero, in bacheca e nelle pagine del plugin. Se un file della cartella protetta risulta scaricabile (tipico di nginx, che ignora il .htaccess) gli amministratori vedono la regola nginx da aggiungere; se la verifica non è possibile, un avviso spiega come controllare a mano. "Ricontrolla ora" ripete la verifica.
+* Rimosso uninstall.php: disinstallando il plugin non si cancellano più tabelle, opzioni e materiali.
 
 = 1.4.3 =
 * Corretto (riservatezza): i contenuti bloccati non sono più leggibili, da chi non ha accesso, fuori dalla pagina stessa. Vale per le pagine con "Blocca l'intera pagina con il codice" attivo e almeno un codice associato e per i contenuti il cui layout YOOtheme usa la condizione "Accesso materiali (pagina corrente)". REST API (compresi elenchi, ricerca e tipi di contenuto personalizzati), feed, estratti (ricerca, archivi, embed), post inclusi in altre pagine (Query Loop) e campi Contenuto/Teaser dei layout YOOtheme mostrano "Contenuto riservato." al posto del testo; dalla REST spariscono anche note a piè di pagina e campi ACF. Prima la REST restituiva l'intero contenuto, compreso il layout YOOtheme con le sezioni nascoste. Come prima, vedono tutto gli amministratori e chi ha riscattato un codice valido; nell'editor a blocchi chi può modificare il contenuto lo riceve completo.

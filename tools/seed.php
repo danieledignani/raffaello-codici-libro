@@ -46,6 +46,7 @@ if (!class_exists('RaffaelloCodiciLibro\\Database')) {
 }
 
 use RaffaelloCodiciLibro\Database;
+use RaffaelloCodiciLibro\FileProtection;
 use RaffaelloCodiciLibro\Materials;
 
 $argv = isset($argv) ? $argv : [];
@@ -145,6 +146,9 @@ foreach ($esempi as $i => $e) {
 
     $meta = wp_generate_attachment_metadata($attach_id, $path);
     wp_update_attachment_metadata($attach_id, $meta);
+    if (!FileProtection::protect($attach_id)) {
+        rcl_seed_log('  ! ' . $e['file'] . ': file non protetto');
+    }
 
     $materiali[] = [
         'id'            => 'seed' . ($i + 1) . '_' . $attach_id,

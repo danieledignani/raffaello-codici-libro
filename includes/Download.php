@@ -9,9 +9,11 @@ if (!defined('ABSPATH')) {
 /**
  * Download protetto dei materiali.
  *
- * I file non sono raggiungibili tramite URL diretto: il download passa da un
- * endpoint che verifica autenticazione, nonce e diritto di accesso al contenuto,
- * quindi trasmette il file in streaming.
+ * L'endpoint verifica nonce, autenticazione, diritto di accesso al contenuto e
+ * appartenenza del materiale, quindi trasmette il file. L'URL diretto del file
+ * non funziona perché il file sta nella cartella protetta di FileProtection, a
+ * patto che il server applichi il suo .htaccess o la regola nginx equivalente:
+ * se non succede, il controllo di salute avvisa gli amministratori.
  */
 class Download
 {

@@ -16,11 +16,15 @@ class Materials
 {
     const META_KEY = '_rcl_materiali';
 
+    /** User meta con i file scartati all'ultimo salvataggio, per l'avviso. */
+    const REJECTED_META = 'rcl_materiali_scartati';
+
     public function register(): void
     {
         add_action('add_meta_boxes', [$this, 'add_meta_box']);
         add_action('save_post', [$this, 'save'], 10, 2);
         add_action('admin_enqueue_scripts', [$this, 'enqueue_admin']);
+        add_action('admin_notices', [$this, 'rejected_notice']);
     }
 
     /** Tipi di contenuto su cui mostrare il meta box. */
@@ -71,6 +75,7 @@ class Materials
         ?>
         <p class="description">
             <?php esc_html_e('Elenco dei materiali scaricabili sbloccabili con il codice del libro. I visitatori vedranno titoli e stato "bloccato" finché non inseriscono un codice valido.', 'raffaello-codici-libro'); ?>
+            <?php esc_html_e('I file caricati da «Scegli file» vanno in una cartella protetta e si scaricano solo dalla pagina, dopo lo sblocco. Dalla libreria media si possono aggiungere solo file già protetti.', 'raffaello-codici-libro'); ?>
         </p>
         <table class="widefat rcl-materiali-table">
             <thead>
@@ -120,6 +125,10 @@ class Materials
         if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) {
             return;
         }
+        // Sulla revisione i materiali salvati non si leggono, e update_post_meta scriverebbe sul padre.
+        if (wp_is_post_revision($post_id)) {
+            return;
+        }
         if (!current_user_can('edit_post', $post_id)) {
             return;
         }
@@ -127,11 +136,21 @@ class Materials
         $titoli = isset($_POST['rcl_materiali_titolo']) ? (array) wp_unslash($_POST['rcl_materiali_titolo']) : [];
         $attachments = isset($_POST['rcl_materiali_attachment']) ? (array) wp_unslash($_POST['rcl_materiali_attachment']) : [];
 
+        // Un file nuovo entra solo se è nella cartella protetta e l'utente può modificarlo, così nessuno
+        // rende scaricabile dal proprio contenuto un allegato privato altrui. Quelli già salvati restano.
+        $salvati = array_map('intval', wp_list_pluck(self::get_materials($post_id), 'attachment_id'));
+        $scartati = [];
+
         $materiali = [];
         foreach ($titoli as $i => $titolo) {
             $titolo = sanitize_text_field($titolo);
             $attachment_id = isset($attachments[$i]) ? (int) $attachments[$i] : 0;
             if ($titolo === '' && $attachment_id === 0) {
+                continue;
+            }
+            if ($attachment_id > 0 && !in_array($attachment_id, $salvati, true)
+                && (!FileProtection::is_protected($attachment_id) || !current_user_can('edit_post', $attachment_id))) {
+                $scartati[] = self::attachment_name($attachment_id);
                 continue;
             }
             $materiali[] = [
@@ -146,6 +165,35 @@ class Materials
         } else {
             update_post_meta($post_id, self::META_KEY, $materiali);
         }
+
+        if ($scartati) {
+            update_user_meta(get_current_user_id(), self::REJECTED_META, $scartati);
+        }
+    }
+
+    /** Avviso dopo un salvataggio con file scartati perché fuori dalla cartella protetta. */
+    public function rejected_notice(): void
+    {
+        $user_id = get_current_user_id();
+        $scartati = get_user_meta($user_id, self::REJECTED_META, true);
+        if (!$scartati) {
+            return;
+        }
+        delete_user_meta($user_id, self::REJECTED_META);
+        $scartati = array_unique($scartati);
+        printf(
+            '<div class="notice notice-error is-dismissible"><p>%s</p></div>',
+            esc_html(sprintf(
+                /* translators: %s: nomi dei file scartati */
+                _n(
+                    'Codici Libro: %s non è stato aggiunto ai materiali: si aggiungono solo file della cartella protetta che puoi modificare. Caricalo dal riquadro «Materiali sbloccabili» con «Scegli file», scheda «Carica file».',
+                    'Codici Libro: %s non sono stati aggiunti ai materiali: si aggiungono solo file della cartella protetta che puoi modificare. Caricali dal riquadro «Materiali sbloccabili» con «Scegli file», scheda «Carica file».',
+                    count($scartati),
+                    'raffaello-codici-libro'
+                ),
+                implode(', ', $scartati)
+            ))
+        );
     }
 
     /** Restituisce i materiali di un contenuto. */

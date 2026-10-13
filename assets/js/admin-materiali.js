@@ -8,9 +8,19 @@
             button: { text: 'Usa questo file' },
             multiple: false
         });
+        // Gli upload da questo modal vanno nella cartella protetta (FileProtection::upload_dir).
+        // Senza uploader (quota multisite esaurita, browser non supportato) si sceglie solo dalla libreria.
+        if (frame.uploader) {
+            frame.uploader.options.uploader.params.rcl_materiale = 1;
+        }
 
         frame.on('select', function () {
             var attachment = frame.state().get('selection').first().toJSON();
+            // Un file fuori dalla cartella protetta verrebbe scartato al salvataggio (Materials::save).
+            if (attachment.url.indexOf('/rcl_materiali/') === -1) {
+                window.alert('«' + (attachment.filename || attachment.title) + '» non è nella cartella protetta: caricalo dalla scheda «Carica file».');
+                return;
+            }
             var $row = $btn.closest('.rcl-materiale-row');
             $row.find('.rcl-attachment-id').val(attachment.id);
             $row.find('.rcl-attachment-name').text(attachment.filename || attachment.title);
