@@ -1,18 +1,18 @@
 {
   "name": "Raffaello Licenze",
-  "version": "1.5.1",
-  "download_url": "https://github.com/danieledignani/raffaello-codici-libro/releases/download/1.5.1/raffaello-codici-libro.zip",
+  "version": "1.5.2",
+  "download_url": "https://github.com/danieledignani/raffaello-codici-libro/releases/download/1.5.2/raffaello-codici-libro.zip",
   "homepage": "https://raffaellolibri.it",
   "requires": "5.8",
   "tested": "6.5",
   "requires_php": "7.4",
-  "last_updated": "2026-10-19 12:40:48",
+  "last_updated": "2026-10-19 23:27:32",
   "upgrade_notice": "Aggiornamento automatico da GitHub",
   "author": "Gruppo Raffaello",
   "author_homepage": "https://github.com/danieledignani",
   "sections": {
     "description": "Licenze di accesso a pagine, materiali scaricabili e corsi LearnDash: codici stampati sui libri e acquisti sul Bookshop attivati in automatico sul profilo di Raffaello Identity.",
     "installation": "Carica il plugin tramite il pannello 'Plugin > Aggiungi nuovo' o scompatta nella cartella wp-content/plugins/",
-    "changelog": "<li>Segreto del Bookshop dalle impostazioni, ping e controlli di configurazione</li>\n<li>Update JSON to version 1.5.0</li>"
+    "changelog": "<li>Testi al singolare, nome Raffaello Licenze negli avvisi e documentazione su scadenze, cache e go-live</li>\n<li>Update JSON to version 1.5.1</li>"
   }
 }
