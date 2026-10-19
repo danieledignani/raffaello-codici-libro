@@ -4,7 +4,7 @@ Tags: licenze, codici, sblocco, materiali, download, scuola, identity, sso, lear
 Requires at least: 5.8
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.5.0
+Stable tag: 1.5.1
 License: GPLv2 or later
 
 Licenze di accesso a pagine, materiali scaricabili e corsi LearnDash: codici stampati sui libri e acquisti sul Bookshop attivati in automatico sul profilo di Raffaello Identity.
@@ -14,7 +14,7 @@ Licenze di accesso a pagine, materiali scaricabili e corsi LearnDash: codici sta
 Una **licenza** sblocca un insieme di contenuti: pagine, articoli e corsi LearnDash. Chi ha una licenza attiva vede le pagine bloccate, scarica i materiali e segue i corsi. Si ottiene in tre modi:
 
 * **Codice stampato sul libro**: condiviso fra tutte le copie, ogni utente che lo inserisce riceve la sua attivazione. Ha un termine per il riscatto (facoltativo); la licenza può dare l'accesso per un numero di giorni dal riscatto oppure senza scadenza.
-* **Acquisto sul Bookshop** (raffaellobookshop.it): License Manager for WooCommerce genera un codice `RSCU-XXXX-XXXX` e lo snippet del Bookshop lo manda a questo sito con il `sub` di Raffaello Identity dell'acquirente. La licenza si attiva da sola sul suo profilo, subito o al primo accesso, con la scadenza decisa dal Bookshop. Con quantità maggiore di 1 l'acquirente riceve il primo codice e può regalare gli altri, che si riscattano a mano. Rimborso totale o annullamento sul Bookshop revocano la licenza.
+* **Acquisto sul Bookshop** (raffaellobookshop.it): License Manager for WooCommerce genera un codice `RSCU-XXXX-XXXX` e il plugin Raffaello Licenze — Bookshop lo manda a questo sito con il `sub` di Raffaello Identity dell'acquirente. La licenza si attiva da sola sul suo profilo, subito o al primo accesso, con la scadenza decisa dal Bookshop. Con quantità maggiore di 1 l'acquirente riceve il primo codice e può regalare gli altri, che si riscattano a mano. Rimborso totale o annullamento sul Bookshop revocano la licenza.
 * **Attivazione manuale** dall'admin, per l'assistenza.
 
 Funzionalità:
@@ -37,7 +37,8 @@ Funzionalità:
 4. `[raffaello_codice]` mostra il solo form del codice. `[raffaello_miei_contenuti]` va in una pagina da indicare in **Licenze > Impostazioni**: il messaggio dopo un riscatto rimanda lì.
 5. **Licenze > Codici > Importa CSV**: colonne `codice,licenza,attivabile_fino`, dove licenza è l'id o lo SKU e la data è facoltativa.
 6. **Corsi LearnDash venduti**: modalità di accesso "Chiusa", con il pulsante verso il prodotto del Bookshop, e senza la scadenza dell'accesso di LearnDash (la scadenza la decide la licenza). Se LearnDash viene attivato dopo gli acquisti, **Licenze > Impostazioni > Riallinea LearnDash**.
-7. **Vendita sul Bookshop**: costante `RCL_BOOKSHOP_SECRET` in `wp-config.php` (lo stesso valore di `RAFFAELLO_SCUOLA_SECRET` sul Bookshop), snippet, generatore e prodotto come descritto in `tools/bookshop/README.md`. Per una prova: `tools/push-di-prova.php` genera un push firmato e il comando curl.
+7. **Vendita sul Bookshop**: in **Licenze > Impostazioni** "Genera segreto" e copia lo stesso valore nelle impostazioni del plugin **Raffaello Licenze — Bookshop**, dove va anche l'indirizzo di questo sito; il segreto si vede una volta sola. In alternativa la costante `RCL_BOOKSHOP_SECRET` in `wp-config.php`, che ha la precedenza sulle impostazioni. Il segreto salvato vale solo sul sito che l'ha salvato: un database copiato da un altro ambiente non si porta dietro il collegamento. Ordine del go-live in `tools/bookshop/README.md`. Per una prova senza Bookshop: `tools/push-di-prova.php` genera un push o un `ping` firmato e il comando curl.
+8. **Licenze > Impostazioni** mostra lo stato della configurazione (segreto, licenze e contenuti, acquisti in attesa, pagina "I miei contenuti", LearnDash, Identity, cartella protetta, ultima richiesta dal Bookshop) con il link per correggere. I problemi bloccanti compaiono anche in Bacheca e nelle pagine del plugin, finché non sono risolti, e in Strumenti > Salute del sito.
 
 Aggiornando dalla 1.4 i dati si migrano da soli: ogni codice con contenuti diventa una licenza con gli stessi contenuti e lo stesso stato, ogni riscatto un'attivazione con la stessa data e la scadenza del codice. Le pagine con il blocco attivo restano bloccate. Le tabelle della 1.4 restano nel database.
 
@@ -54,10 +55,18 @@ Aggiornando dalla 1.4 i dati si migrano da soli: ogni codice con contenuti diven
 * Un solo server di database, senza instradare le SELECT su repliche (HyperDB/LudicrousDB): i lock per nome valgono solo sul server che li prende.
 * Plugin **Raffaello Identity** per l'autenticazione SSO e per l'aggancio degli acquisti al profilo (`sub` di Identity).
 * Facoltativi: **LearnDash** (corsi), **ACF** (riquadro della pagina come field group), **YOOtheme Pro** (elemento e condizioni), **WooCommerce** (log).
-* Sul Bookshop: WooCommerce con Action Scheduler e License Manager for WooCommerce 3.0.20.
+* Sul Bookshop: il plugin Raffaello Licenze — Bookshop, con WooCommerce, Action Scheduler e License Manager for WooCommerce 3.0.20. Il segreto condiviso si imposta dalle impostazioni dei due plugin, oppure con le costanti in `wp-config.php`.
 * Con nginx (che ignora il .htaccess) una regola che neghi l'accesso diretto a wp-content/uploads/rcl_materiali/: se manca, il plugin mostra agli amministratori la regola da aggiungere.
 
 == Changelog ==
+
+= 1.5.1 =
+* Nuovo: il segreto condiviso con il Bookshop si imposta da Licenze > Impostazioni, con "Genera segreto" (mostrato una volta sola) oppure incollandolo. È salvato senza caricamento automatico e vale solo sul sito che l'ha salvato: un database copiato da un altro ambiente non si porta dietro il collegamento. Non si rilegge mai: il campo vuoto lo lascia com'è, per toglierlo c'è "Cancella segreto". La costante RCL_BOOKSHOP_SECRET in wp-config.php resta e ha la precedenza, anche vuota.
+* Nuovo: evento "ping" sull'endpoint raffaello-licenze/v1/eventi, firmato come gli altri. Risponde con versione, ora e SKU senza una licenza attiva, senza toccare licenze e attivazioni. Lo usa "Prova connessione" del plugin del Bookshop; anche tools/push-di-prova.php prepara il ping.
+* Nuovo: Licenze > Impostazioni mostra lo stato della configurazione, con il link per correggere: segreto, tabelle, licenze vendute e contenuti pubblicati, acquisti in attesa, pagina "I miei contenuti", LearnDash e impostazioni dei corsi, cron delle scadenze, Raffaello Identity, https, cartella protetta, ultima richiesta dal Bookshop. Finché non sono risolti, i problemi bloccanti compaiono anche in Bacheca, nelle altre pagine del plugin e in Strumenti > Salute del sito.
+* Nuovo: si registra l'ultima richiesta del Bookshop con firma valida (ora, evento, esito, IP). I rifiuti restano solo nel log.
+* Modificato: un segreto con meno di 32 caratteri, anche nella costante, non vale più e l'endpoint risponde 503.
+* Modificato: il codice del Bookshop non è più uno snippet in tools/bookshop ma il plugin "Raffaello Licenze — Bookshop". tools/bookshop/README.md rimanda al plugin e riporta l'ordine del go-live.
 
 = 1.5.0 =
 * Nuovo: il plugin si chiama "Raffaello Licenze" (cambia solo il nome visibile; slug, text domain e prefissi restano). Pagine, materiali e corsi LearnDash si sbloccano con licenze, che si ottengono con un codice stampato sul libro, un acquisto sul Bookshop o un'attivazione dell'assistenza.

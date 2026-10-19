@@ -38,6 +38,7 @@ class Plugin
         (new Activations())->register();
         (new Push())->register();
         (new LearnDash())->register();
+        (new Health())->register();
 
         if (is_admin()) {
             (new Admin())->register();

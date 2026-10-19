@@ -1,14 +1,18 @@
 <?php
 /**
- * Push di prova verso Raffaello Scuola: crea un evento firmato come quelli dello
- * snippet del Bookshop e stampa il comando curl per mandarlo.
+ * Push di prova verso Raffaello Scuola: crea un evento firmato come quelli del
+ * plugin del Bookshop e stampa il comando curl per mandarlo.
  *
  * Uso, solo da riga di comando, con il segreto nell'ambiente e non negli argomenti:
  *   RCL_BOOKSHOP_SECRET=... php tools/push-di-prova.php --url=https://dev.raffaelloscuola.it --sku=SKU-PRODOTTO [opzioni]
+ *   RCL_BOOKSHOP_SECRET=... php tools/push-di-prova.php --url=https://dev.raffaelloscuola.it --evento=ping [--sku=SKU1,SKU2]
+ *
+ * Il ping prova collegamento e firma senza scrivere niente: risponde con versione, ora e gli
+ * SKU passati che non corrispondono a una licenza attiva (sku_sconosciuti).
  *
  * Opzioni:
  *   --sub=123                    sub di Identity del destinatario (senza: nessun destinatario)
- *   --evento=licenze_revocate    default licenze_assegnate
+ *   --evento=licenze_revocate    default licenze_assegnate; oppure ping
  *   --id=900001                  id della licenza di License Manager (default casuale)
  *   --chiave=RSCU-AB12-CD34      chiave della prima licenza (default casuale)
  *   --ordine=12345               id dell'ordine (default casuale)
@@ -26,9 +30,19 @@ if (PHP_SAPI !== 'cli') {
 
 $opt = getopt('', ['url:', 'sku:', 'sub:', 'evento:', 'id:', 'chiave:', 'ordine:', 'giorni:', 'quantita:']);
 $secret = (string) getenv('RCL_BOOKSHOP_SECRET');
-if (empty($opt['url']) || empty($opt['sku']) || $secret === '') {
-    fwrite(STDERR, "Uso: RCL_BOOKSHOP_SECRET=... php tools/push-di-prova.php --url=https://dev.raffaelloscuola.it --sku=SKU [--sub=123] [--evento=licenze_revocate] [--id=N] [--chiave=RSCU-XXXX-XXXX] [--ordine=N] [--giorni=365] [--quantita=1]\n");
+$evento = $opt['evento'] ?? 'licenze_assegnate';
+if (empty($opt['url']) || ($evento !== 'ping' && empty($opt['sku'])) || $secret === '') {
+    fwrite(STDERR, "Uso: RCL_BOOKSHOP_SECRET=... php tools/push-di-prova.php --url=https://dev.raffaelloscuola.it --sku=SKU [--sub=123] [--evento=licenze_revocate] [--id=N] [--chiave=RSCU-XXXX-XXXX] [--ordine=N] [--giorni=365] [--quantita=1]\n"
+        . "     RCL_BOOKSHOP_SECRET=... php tools/push-di-prova.php --url=https://dev.raffaelloscuola.it --evento=ping [--sku=SKU1,SKU2]\n");
     exit(1);
+}
+
+if ($evento === 'ping') {
+    $body = json_encode(['evento' => 'ping', 'skus' => isset($opt['sku']) ? explode(',', $opt['sku']) : []], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    file_put_contents('push-di-prova.json', $body);
+    fwrite(STDERR, "Ping, corpo in push-di-prova.json; la firma vale 5 minuti:\n\n");
+    echo curl_command($opt['url'], $body, $secret);
+    exit(0);
 }
 
 $alfabeto = 'ABCDEFGHLMNPQRSTUVZ123456789';
@@ -60,22 +74,25 @@ for ($i = 0; $i < $quantita; $i++) {
 }
 
 $body = json_encode([
-    'evento'  => $opt['evento'] ?? 'licenze_assegnate',
+    'evento'  => $evento,
     'ordine'  => ['id' => $ordine, 'numero' => (string) $ordine, 'stato' => 'test'],
     'cliente' => ['sub' => isset($opt['sub']) ? (string) $opt['sub'] : null, 'email' => 'prova@example.test'],
     'licenze' => $licenze,
 ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 file_put_contents('push-di-prova.json', $body);
 
-$timestamp = (string) time();
-$signature = hash_hmac('sha256', $timestamp . '.' . $body, $secret);
-
 fwrite(STDERR, 'Ordine ' . $ordine . ', licenze ' . implode(', ', array_map(function ($l) {
     return $l['id'] . ' ' . $l['chiave'];
 }, $licenze)) . "\nCorpo in push-di-prova.json; la firma vale 5 minuti:\n\n");
+echo curl_command($opt['url'], $body, $secret);
 
-echo "curl -sS -X POST '" . rtrim($opt['url'], '/') . "/wp-json/raffaello-licenze/v1/eventi'"
-    . " -H 'Content-Type: application/json'"
-    . " -H 'X-Raffaello-Timestamp: " . $timestamp . "'"
-    . " -H 'X-Raffaello-Signature: sha256=" . $signature . "'"
-    . " --data-binary '@push-di-prova.json'\n";
+/** Comando curl con la firma di adesso: HMAC-SHA256 di timestamp + "." + corpo. */
+function curl_command(string $url, string $body, string $secret): string
+{
+    $timestamp = (string) time();
+    return "curl -sS -X POST '" . rtrim($url, '/') . "/wp-json/raffaello-licenze/v1/eventi'"
+        . " -H 'Content-Type: application/json'"
+        . " -H 'X-Raffaello-Timestamp: " . $timestamp . "'"
+        . " -H 'X-Raffaello-Signature: sha256=" . hash_hmac('sha256', $timestamp . '.' . $body, $secret) . "'"
+        . " --data-binary '@push-di-prova.json'\n";
+}

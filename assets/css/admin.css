@@ -15,3 +15,46 @@
 .rcl-remove-row {
     color: #b32d2e;
 }
+
+/* Impostazioni: stato della configurazione e azioni sul segreto */
+
+.rcl-controlli td:first-child {
+    width: 9em;
+}
+
+.rcl-controlli th[scope="row"] {
+    width: 20em;
+    font-weight: 600;
+}
+
+.rcl-stato {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #fff;
+    background: #787c82;
+}
+
+.rcl-stato--ok {
+    background: #00a32a;
+}
+
+.rcl-stato--bloccante {
+    background: #d63638;
+}
+
+.rcl-stato--attenzione {
+    background: #dba617;
+    color: #1d2327;
+}
+
+.rcl-stato--informativo {
+    background: #2271b1;
+}
+
+.rcl-azione-segreto {
+    display: inline-block;
+    margin-right: .5em;
+}

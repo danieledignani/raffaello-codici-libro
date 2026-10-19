@@ -99,8 +99,41 @@ class Admin
                     break;
                 case 'save_impostazioni':
                     check_admin_referer('rcl_impostazioni');
+                    // Segreto: vuoto = resta quello che c'è; se non è valido non si salva niente.
+                    $segreto = isset($_POST['segreto']) ? trim((string) wp_unslash($_POST['segreto'])) : '';
+                    if ($segreto !== '' && !preg_match('/^[\x21-\x7e]{' . Config::MIN_LENGTH . ',256}$/', $segreto)) {
+                        self::back('rcl_impostazioni', ['rcl_msg' => 'segreto_non_valido']);
+                    }
                     update_option(Frontend::OPTION_MIEI_CONTENUTI, isset($_POST['pagina']) ? (int) $_POST['pagina'] : 0);
-                    self::back('rcl_impostazioni', ['rcl_msg' => 'impostazioni_salvate']);
+                    if ($segreto !== '') {
+                        if (!Config::save($segreto)) {
+                            self::back('rcl_impostazioni', ['rcl_msg' => 'segreto_non_salvato']);
+                        }
+                        Log::info('Segreto del Bookshop salvato dalle impostazioni.', ['admin' => get_current_user_id()]);
+                    }
+                    self::back('rcl_impostazioni', ['rcl_msg' => $segreto !== '' ? 'segreto_salvato' : 'impostazioni_salvate']);
+                    break;
+                case 'genera_segreto':
+                    check_admin_referer('rcl_genera_segreto');
+                    $segreto = bin2hex(random_bytes(32));
+                    if (!Config::save($segreto)) {
+                        self::back('rcl_impostazioni', ['rcl_msg' => 'segreto_non_salvato']);
+                    }
+                    Log::info('Segreto del Bookshop generato dalle impostazioni.', ['admin' => get_current_user_id()]);
+                    // Si mostra una volta sola, alla prossima apertura della pagina. Nel transient c'è solo
+                    // l'impronta: il segreto resta in un solo posto del database.
+                    if (!set_transient('rcl_segreto_nuovo_' . get_current_user_id(), wp_hash($segreto), 10 * MINUTE_IN_SECONDS)) {
+                        self::back('rcl_impostazioni', ['rcl_msg' => 'segreto_non_mostrato']);
+                    }
+                    self::back('rcl_impostazioni', ['rcl_msg' => 'segreto_generato']);
+                    break;
+                case 'cancella_segreto':
+                    check_admin_referer('rcl_cancella_segreto');
+                    if (!Config::delete()) {
+                        self::back('rcl_impostazioni', ['rcl_msg' => 'segreto_non_cancellato']);
+                    }
+                    Log::info('Segreto del Bookshop cancellato dalle impostazioni.', ['admin' => get_current_user_id()]);
+                    self::back('rcl_impostazioni', ['rcl_msg' => 'segreto_cancellato']);
                     break;
                 case 'riallinea':
                     check_admin_referer('rcl_riallinea');
@@ -937,11 +970,58 @@ class Admin
 
     public function page_impostazioni(): void
     {
-        $secret = defined('RCL_BOOKSHOP_SECRET') ? (string) RCL_BOOKSHOP_SECRET : '';
+        $config = Config::state();
+        $costante = defined(Config::CONSTANT);
+        // Il segreto appena generato si mostra una volta, e solo se è quello che vale ora: una
+        // costante definita nel frattempo, un'altra generazione o un database copiato lo superano.
+        $nuovo = get_transient('rcl_segreto_nuovo_' . get_current_user_id());
+        if ($nuovo !== false) {
+            delete_transient('rcl_segreto_nuovo_' . get_current_user_id());
+        }
+        $mostra = $nuovo !== false && $config['segreto'] !== '' && hash_equals($nuovo, wp_hash($config['segreto']));
+        $fonti = [
+            'wp-config'    => __('wp-config.php (RCL_BOOKSHOP_SECRET), che ha la precedenza sulle impostazioni', 'raffaello-codici-libro'),
+            'impostazioni' => $config['problema'] === 'altro_host'
+                /* translators: %s: host */
+                ? sprintf(__('impostazioni salvate da un altro sito (%s), che qui non valgono', 'raffaello-codici-libro'), $config['host'])
+                : __('impostazioni', 'raffaello-codici-libro'),
+            ''             => __('nessuna', 'raffaello-codici-libro'),
+        ];
+        $stati = [
+            Health::OK               => __('OK', 'raffaello-codici-libro'),
+            Health::BLOCCANTE        => __('Bloccante', 'raffaello-codici-libro'),
+            Health::ATTENZIONE       => __('Attenzione', 'raffaello-codici-libro'),
+            Health::INFO             => __('Info', 'raffaello-codici-libro'),
+            Health::NON_VERIFICABILE => __('Non verificabile', 'raffaello-codici-libro'),
+        ];
         ?>
         <div class="wrap">
             <h1><?php esc_html_e('Impostazioni', 'raffaello-codici-libro'); ?></h1>
             <?php $this->notice(); ?>
+            <?php if ($mostra) : ?>
+                <div class="notice notice-warning">
+                    <p><strong><?php esc_html_e('Copia ora il segreto nelle impostazioni del plugin «Raffaello Licenze — Bookshop»: non verrà più mostrato.', 'raffaello-codici-libro'); ?></strong></p>
+                    <p><input type="text" class="large-text code" readonly value="<?php echo esc_attr($config['segreto']); ?>" onfocus="this.select();" /></p>
+                </div>
+            <?php endif; ?>
+
+            <h2><?php esc_html_e('Stato della configurazione', 'raffaello-codici-libro'); ?></h2>
+            <table class="widefat striped rcl-controlli">
+                <tbody>
+                <?php foreach (Health::problems() as $c) : ?>
+                    <tr>
+                        <td><span class="rcl-stato rcl-stato--<?php echo esc_attr($c['stato']); ?>"><?php echo esc_html($stati[$c['stato']]); ?></span></td>
+                        <th scope="row"><?php echo esc_html($c['titolo']); ?></th>
+                        <td>
+                            <?php echo esc_html($c['testo']); ?>
+                            <?php if ($c['link'] !== null && $c['stato'] !== Health::OK) : ?>
+                                <a href="<?php echo esc_url($c['link']); ?>"><?php esc_html_e('Correggi', 'raffaello-codici-libro'); ?></a>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
 
             <form method="post" action="<?php echo esc_url(self::url('rcl_impostazioni')); ?>">
                 <?php wp_nonce_field('rcl_impostazioni'); ?>
@@ -955,28 +1035,43 @@ class Admin
                         </td>
                     </tr>
                 </table>
+
+                <h2><?php esc_html_e('Licenze dal Bookshop', 'raffaello-codici-libro'); ?></h2>
+                <table class="form-table" role="presentation">
+                    <tr>
+                        <th><?php esc_html_e('Endpoint', 'raffaello-codici-libro'); ?></th>
+                        <td><code><?php echo esc_html(rest_url(Push::ROUTE_NAMESPACE . '/eventi')); ?></code></td>
+                    </tr>
+                    <tr>
+                        <th><label for="rcl-segreto"><?php esc_html_e('Segreto', 'raffaello-codici-libro'); ?></label></th>
+                        <td>
+                            <?php if ($costante) : ?>
+                                <input type="password" id="rcl-segreto" class="regular-text" disabled placeholder="<?php esc_attr_e('Gestito da wp-config.php', 'raffaello-codici-libro'); ?>" />
+                            <?php else : ?>
+                                <input type="password" id="rcl-segreto" name="segreto" class="regular-text" autocomplete="new-password" spellcheck="false" placeholder="<?php echo $config['fonte'] === 'impostazioni' && $config['problema'] === null ? esc_attr__('Salvato: lascia vuoto per non cambiarlo', 'raffaello-codici-libro') : ''; ?>" />
+                                <p class="description"><?php esc_html_e('Lo stesso valore va nelle impostazioni del plugin «Raffaello Licenze — Bookshop». Incolla qui un segreto di almeno 32 caratteri senza spazi, oppure generalo con il pulsante qui sotto. Lasciato vuoto non cambia; il segreto salvato non si rilegge.', 'raffaello-codici-libro'); ?></p>
+                            <?php endif; ?>
+                            <p class="description"><?php /* translators: %s: fonte del segreto */ echo esc_html(sprintf(__('Fonte: %s.', 'raffaello-codici-libro'), $fonti[$config['fonte']])); ?></p>
+                        </td>
+                    </tr>
+                </table>
                 <?php submit_button(); ?>
             </form>
 
-            <h2><?php esc_html_e('Licenze dal Bookshop', 'raffaello-codici-libro'); ?></h2>
-            <table class="form-table" role="presentation">
-                <tr>
-                    <th><?php esc_html_e('Endpoint', 'raffaello-codici-libro'); ?></th>
-                    <td><code><?php echo esc_html(rest_url(Push::ROUTE_NAMESPACE . '/eventi')); ?></code></td>
-                </tr>
-                <tr>
-                    <th><?php esc_html_e('Segreto', 'raffaello-codici-libro'); ?></th>
-                    <td>
-                        <?php if ($secret === '') : ?>
-                            <strong style="color:#d63638;"><?php esc_html_e('Non definito: i push del Bookshop vengono rifiutati (503). Definisci RCL_BOOKSHOP_SECRET in wp-config.php.', 'raffaello-codici-libro'); ?></strong>
-                        <?php elseif (strlen($secret) < 32) : ?>
-                            <strong style="color:#d63638;"><?php esc_html_e('Definito ma troppo corto: servono almeno 32 caratteri casuali.', 'raffaello-codici-libro'); ?></strong>
-                        <?php else : ?>
-                            <?php esc_html_e('Definito in wp-config.php (RCL_BOOKSHOP_SECRET).', 'raffaello-codici-libro'); ?>
-                        <?php endif; ?>
-                    </td>
-                </tr>
-            </table>
+            <?php if (!$costante) : ?>
+                <form method="post" action="<?php echo esc_url(self::url('rcl_impostazioni')); ?>" class="rcl-azione-segreto">
+                    <?php wp_nonce_field('rcl_genera_segreto'); ?>
+                    <input type="hidden" name="rcl_admin_action" value="genera_segreto" />
+                    <?php submit_button(__('Genera segreto', 'raffaello-codici-libro'), 'secondary', 'submit', false, $config['fonte'] === '' ? [] : ['onclick' => "return confirm('" . esc_js(__('Il segreto attuale smette di valere: andrà aggiornato anche sul Bookshop. Continuare?', 'raffaello-codici-libro')) . "');"]); ?>
+                </form>
+                <?php if ($config['fonte'] !== '') : ?>
+                    <form method="post" action="<?php echo esc_url(self::url('rcl_impostazioni')); ?>" class="rcl-azione-segreto">
+                        <?php wp_nonce_field('rcl_cancella_segreto'); ?>
+                        <input type="hidden" name="rcl_admin_action" value="cancella_segreto" />
+                        <?php submit_button(__('Cancella segreto', 'raffaello-codici-libro'), 'delete', 'submit', false, ['onclick' => "return confirm('" . esc_js(__('Cancellare il segreto? Gli acquisti dal Bookshop verranno rifiutati finché non ne salvi uno nuovo.', 'raffaello-codici-libro')) . "');"]); ?>
+                    </form>
+                <?php endif; ?>
+            <?php endif; ?>
 
             <h2><?php esc_html_e('LearnDash', 'raffaello-codici-libro'); ?></h2>
             <p>
@@ -1078,6 +1173,13 @@ class Admin
             'non_modificata'    => ['error', __('Attivazione non trovata o già revocata.', 'raffaello-codici-libro')],
             'non_riattivabile'  => ['error', __('Attivazione non riattivabile: il suo codice è stato revocato dal Bookshop.', 'raffaello-codici-libro')],
             'impostazioni_salvate' => ['success', __('Impostazioni salvate.', 'raffaello-codici-libro')],
+            'segreto_salvato'   => ['success', __('Impostazioni e segreto del Bookshop salvati.', 'raffaello-codici-libro')],
+            'segreto_generato'  => ['success', __('Segreto del Bookshop generato e salvato.', 'raffaello-codici-libro')],
+            'segreto_cancellato' => ['warning', __('Segreto del Bookshop cancellato: gli acquisti vengono rifiutati finché non ne salvi uno nuovo.', 'raffaello-codici-libro')],
+            'segreto_non_valido' => ['error', __('Non è stato salvato niente: il segreto deve avere almeno 32 caratteri, senza spazi.', 'raffaello-codici-libro')],
+            'segreto_non_salvato' => ['error', __('Segreto non salvato: riprova.', 'raffaello-codici-libro')],
+            'segreto_non_cancellato' => ['error', __('Segreto non cancellato: riprova.', 'raffaello-codici-libro')],
+            'segreto_non_mostrato' => ['error', __('Segreto generato e salvato, ma non è stato possibile mostrarlo: generane un altro.', 'raffaello-codici-libro')],
             'riallineato'       => [empty($_GET['ko']) ? 'success' : 'warning', sprintf(__('LearnDash riallineato per %d utenti.', 'raffaello-codici-libro'), isset($_GET['n']) ? (int) $_GET['n'] : 0)
                 . (empty($_GET['ko']) ? '' : ' ' . sprintf(__('Non riusciti: %d (dettagli nel log), riprova.', 'raffaello-codici-libro'), (int) $_GET['ko']))],
         ];

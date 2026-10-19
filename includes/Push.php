@@ -9,8 +9,9 @@ if (!defined('ABSPATH')) {
 /**
  * Licenze vendute sul Bookshop: POST /wp-json/raffaello-licenze/v1/eventi.
  *
- * Lo manda lo snippet tools/bookshop/raffaello-scuola-licenze.php, firmato con
- * HMAC-SHA256 di timestamp + "." + corpo e il segreto RCL_BOOKSHOP_SECRET.
+ * Lo manda il plugin "Raffaello Licenze — Bookshop", firmato con HMAC-SHA256 di
+ * timestamp + "." + corpo e il segreto di Config. Eventi: licenze_assegnate,
+ * licenze_revocate e ping, che prova collegamento e firma senza scrivere niente.
  * Ogni licenza è idempotente sul suo id esterno (id di License Manager): un
  * push ripetuto non cambia niente, una revoca è definitiva anche se arriva
  * prima dell'assegnazione.
@@ -21,6 +22,10 @@ class Push
     const MAX_BODY = 65536;
     const MAX_LICENZE = 50;
     const TOLLERANZA = 300;
+    const MAX_SKU = 500;
+
+    /** Ultima richiesta con firma valida: ora UTC, evento, esito, IP. */
+    const ULTIMO_EVENTO = 'rcl_ultimo_evento';
 
     public function register(): void
     {
@@ -41,9 +46,9 @@ class Push
     /** Firma: 503 senza segreto, 401 se non torna, true se valida. */
     private function verify(\WP_REST_Request $request)
     {
-        $secret = defined('RCL_BOOKSHOP_SECRET') ? (string) RCL_BOOKSHOP_SECRET : '';
+        $secret = Config::secret();
         if ($secret === '') {
-            Log::error('RCL_BOOKSHOP_SECRET non definito in wp-config.php: push dal Bookshop rifiutato.');
+            Log::error('Segreto del Bookshop non configurato o non valido (Licenze > Impostazioni): push rifiutato.');
             return new \WP_Error('rcl_non_configurato', 'Servizio non configurato.', ['status' => 503]);
         }
 
@@ -74,10 +79,35 @@ class Push
         }
 
         $body = $request->get_body();
-        $evento = strlen($body) <= self::MAX_BODY ? self::parse(json_decode($body, true)) : 'corpo oltre 64 KB';
+        $too_big = strlen($body) > self::MAX_BODY;
+        $data = $too_big ? null : json_decode($body, true);
+        try {
+            $response = $too_big ? self::rejected('corpo oltre 64 KB') : self::respond($data);
+        } catch (\Throwable $e) {
+            Log::error('Push non elaborato (' . get_class($e) . '), il Bookshop riproverà.', ['ordine' => $data['ordine']['id'] ?? null]);
+            $response = new \WP_Error('rcl_errore', 'Errore interno, riprovare.', ['status' => 500]);
+        }
+
+        // Solo con la firma valida: scrivere il database a ogni rifiuto aprirebbe a un attacco di carico.
+        update_option(self::ULTIMO_EVENTO, [
+            'ora'    => Database::now(),
+            'evento' => is_string($data['evento'] ?? null) ? substr($data['evento'], 0, 40) : '',
+            'esito'  => is_wp_error($response) ? $response->get_error_code() : 'ok',
+            'ip'     => Codes::client_ip(),
+        ], false);
+        return $response;
+    }
+
+    /** Corpo di una richiesta con firma valida: ping, oppure licenze assegnate o revocate. */
+    private static function respond($data)
+    {
+        if (($data['evento'] ?? null) === 'ping') {
+            $skus = self::parse_skus($data);
+            return is_string($skus) ? self::rejected($skus) : self::ping($skus);
+        }
+        $evento = self::parse($data);
         if (is_string($evento)) {
-            Log::warning('Push rifiutato: ' . $evento . '.');
-            return new \WP_Error('rcl_formato', $evento, ['status' => 400]);
+            return self::rejected($evento);
         }
 
         // Un evento per ordine alla volta: assegnazione e revoca dello stesso ordine, e la
@@ -95,9 +125,6 @@ class Push
                     'esito' => $evento['evento'] === 'licenze_revocate' ? self::revoke($licenza, $evento) : self::assign($licenza, $evento),
                 ];
             }
-        } catch (\Throwable $e) {
-            Log::error('Push non elaborato (' . get_class($e) . '), il Bookshop riproverà.', ['ordine' => $evento['ordine_id']]);
-            return new \WP_Error('rcl_errore', 'Errore interno, riprovare.', ['status' => 500]);
         } finally {
             Database::unlock($lock);
         }
@@ -115,6 +142,51 @@ class Push
         ]);
 
         return new \WP_REST_Response(['ok' => true, 'esiti' => $esiti], 200);
+    }
+
+    private static function rejected(string $reason): \WP_Error
+    {
+        Log::warning('Push rifiutato: ' . $reason . '.');
+        return new \WP_Error('rcl_formato', $reason, ['status' => 400]);
+    }
+
+    /** Ping: versione, ora e gli SKU che non corrispondono a una licenza attiva. Non scrive niente. */
+    private static function ping(array $skus): \WP_REST_Response
+    {
+        global $wpdb;
+        // In minuscolo: la colonna sku non distingue le maiuscole, come in Licenses::by_sku().
+        $known = $skus ? array_map('strtolower', Database::get_col($wpdb->prepare(
+            'SELECT sku FROM ' . Database::table('licenze') . ' WHERE attiva = 1 AND sku IN (' . implode(', ', array_fill(0, count($skus), '%s')) . ')',
+            $skus
+        ))) : [];
+        $unknown = array_values(array_filter($skus, function ($sku) use ($known) {
+            return !in_array(strtolower($sku), $known, true);
+        }));
+        Log::info('Ping dal Bookshop.', ['sku' => count($skus), 'sku_sconosciuti' => $unknown]);
+
+        return new \WP_REST_Response([
+            'ok'              => true,
+            'versione'        => RCL_VERSION,
+            'ora'             => gmdate('Y-m-d\TH:i:s\Z', time()),
+            'sku_sconosciuti' => $unknown,
+        ], 200);
+    }
+
+    /** SKU del ping, facoltativi: al massimo 500 stringhe. L'elenco senza doppioni, o il motivo del rifiuto. */
+    private static function parse_skus(array $data)
+    {
+        $skus = $data['skus'] ?? [];
+        if (!is_array($skus) || count($skus) > self::MAX_SKU) {
+            return 'skus: elenco di al massimo ' . self::MAX_SKU;
+        }
+        $out = [];
+        foreach (array_values($skus) as $i => $sku) {
+            if (!is_string($sku) || trim($sku) === '' || strlen(trim($sku)) > 100) {
+                return "skus[$i] non valido";
+            }
+            $out[] = trim($sku);
+        }
+        return array_values(array_unique($out));
     }
 
     /** Valida il corpo e lo normalizza; un rifiuto restituisce il motivo. */
