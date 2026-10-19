@@ -80,7 +80,7 @@ class Health
 
         $p[] = $vendibili
             /* translators: %d: numero di licenze */
-            ? self::item('licenze', self::OK, __('Licenze vendute sul Bookshop', 'raffaello-codici-libro'), sprintf(__('%d licenze attive con lo SKU di un prodotto.', 'raffaello-codici-libro'), $vendibili))
+            ? self::item('licenze', self::OK, __('Licenze vendute sul Bookshop', 'raffaello-codici-libro'), sprintf(_n('%d licenza attiva con lo SKU di un prodotto.', '%d licenze attive con lo SKU di un prodotto.', $vendibili, 'raffaello-codici-libro'), $vendibili))
             : self::item('licenze', self::ATTENZIONE, __('Licenze vendute sul Bookshop', 'raffaello-codici-libro'), __('Nessuna licenza attiva ha lo SKU di un prodotto del Bookshop: gli acquisti restano in attesa di configurazione.', 'raffaello-codici-libro'), admin_url('admin.php?page=rcl_licenze'));
 
         // Conta solo un contenuto pubblicato: uno cestinato o in bozza non sblocca niente.
@@ -113,10 +113,10 @@ class Health
             $p[] = self::item('learndash', self::OK, $titolo, __('Nessuna licenza ha corsi.', 'raffaello-codici-libro'));
         } elseif (!LearnDash::active()) {
             /* translators: %d: numero di corsi */
-            $p[] = self::item('learndash', self::BLOCCANTE, $titolo, sprintf(__('%d corsi collegati alle licenze, ma LearnDash non è attivo: chi ha la licenza non viene iscritto.', 'raffaello-codici-libro'), count($corsi)), admin_url('plugins.php'));
+            $p[] = self::item('learndash', self::BLOCCANTE, $titolo, sprintf(_n('%d corso collegato alle licenze, ma LearnDash non è attivo: chi ha la licenza non viene iscritto.', '%d corsi collegati alle licenze, ma LearnDash non è attivo: chi ha la licenza non viene iscritto.', count($corsi), 'raffaello-codici-libro'), count($corsi)), admin_url('plugins.php'));
         } else {
             /* translators: %d: numero di corsi */
-            $p[] = self::item('learndash', self::OK, $titolo, sprintf(__('Attivo, %d corsi collegati alle licenze.', 'raffaello-codici-libro'), count($corsi)));
+            $p[] = self::item('learndash', self::OK, $titolo, sprintf(_n('Attivo, %d corso collegato alle licenze.', 'Attivo, %d corsi collegati alle licenze.', count($corsi), 'raffaello-codici-libro'), count($corsi)));
         }
         // In modalità aperta o gratuita si entra nel corso senza licenza.
         $p[] = self::course_setting($corsi, 'modalita', __('Corsi in modalità «Chiusa»', 'raffaello-codici-libro'), function ($id) {

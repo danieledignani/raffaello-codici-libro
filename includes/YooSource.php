@@ -10,7 +10,7 @@ if (!defined('ABSPATH')) {
  * Integrazione YOOtheme Pro — Dynamic Content Source.
  *
  * Estende il tipo "Site" della source di YOOtheme con un campo booleano
- * "Accesso materiali (pagina corrente)" (gruppo "Codici Libro", marcato come
+ * "Accesso materiali (pagina corrente)" (gruppo "Raffaello Licenze", marcato come
  * condizione): indica se l'utente corrente può accedere ai materiali della
  * pagina in rendering (ha riscattato un codice valido collegato, oppure è
  * amministratore, coerentemente con Codes::user_can_access).
@@ -55,7 +55,7 @@ class YooSource
                     'type'     => 'Boolean',
                     'metadata' => [
                         'label'     => 'Accesso materiali (pagina corrente)',
-                        'group'     => 'Codici Libro',
+                        'group'     => 'Raffaello Licenze',
                         'condition' => true,
                     ],
                     'extensions' => [

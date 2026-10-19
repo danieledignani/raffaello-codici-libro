@@ -35,8 +35,26 @@ esempio dal server del Bookshop per provare Cloudflare.
 2. Raffaello Identity, Raffaello Licenze e LearnDash su Raffaello Scuola di produzione.
 3. Su Raffaello Scuola le licenze, con lo SKU dei prodotti e i contenuti; i corsi venduti in
    modalità "Chiusa" e senza la scadenza dell'accesso di LearnDash.
-4. Sul Bookshop il generatore `RSCU-` di License Manager, i prodotti RSCU, l'esclusione delle
-   chiavi RSCU dallo snippet GreenBubble e il plugin Raffaello Licenze — Bookshop.
-5. Il collegamento come sopra, poi "Prova connessione".
-6. Un ordine di prova e il suo rimborso totale: attivazione e revoca su Raffaello Scuola, in
-   Licenze > Attivazioni.
+4. Su Raffaello Scuola la verifica del cron e della cache:
+   - il passaggio giornaliero che toglie i corsi scaduti deve girare (WP-Cron, oppure un cron
+     di sistema con `DISABLE_WP_CRON`); Licenze > Impostazioni dice se è in ritardo;
+   - pagine riservate, corsi e download non devono arrivare dalla cache agli utenti collegati
+     (WP Rocket con "User Cache", Cloudflare con "Cache Everything"): prova dopo una revoca,
+     con due utenti diversi e da anonimo.
+5. Sul Bookshop il generatore `RSCU-` di License Manager, i prodotti RSCU, l'esclusione delle
+   chiavi RSCU dallo snippet GreenBubble e il plugin Raffaello Licenze — Bookshop. I prodotti
+   RSCU restano non acquistabili, privati o in bozza, fino alla prova finale.
+6. Il collegamento come sopra, poi "Prova connessione".
+7. Prova finale con un prodotto di prova dedicato: pubblicato ma nascosto dal catalogo, con il
+   generatore `RSCU-` e uno SKU proprio, e su Raffaello Scuola una licenza di prova con quello
+   SKU. Un utente non amministratore lo compra dal checkout, poi l'ordine si rimborsa per intero:
+   attivazione e revoca si vedono in Licenze > Attivazioni. Finita la prova, il prodotto e la
+   licenza di prova si rendono privati o si eliminano.
+8. Solo alla fine, l'apertura delle vendite: i prodotti RSCU veri diventano acquistabili.
+
+## Rimborso parziale
+
+Con un rimborso parziale le licenze interessate si sistemano a mano su Raffaello Scuola:
+
+- codice già riscattato: si revoca l'attivazione in Licenze > Attivazioni (ricerca per ordine);
+- codice ancora libero: si disattiva in Licenze > Codici.

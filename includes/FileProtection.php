@@ -441,21 +441,26 @@ class FileProtection
     private function result_notices(): void
     {
         if (isset($_GET['rcl_occupato'])) {
-            self::print_notice('warning', __('Codici Libro: la protezione dei file è già in corso. Riprova tra qualche minuto.', 'raffaello-codici-libro'));
+            self::print_notice('warning', __('Raffaello Licenze: la protezione dei file è già in corso. Riprova tra qualche minuto.', 'raffaello-codici-libro'));
         }
         if (isset($_GET['rcl_protetti'], $_GET['rcl_falliti'])) {
             $protetti = (int) $_GET['rcl_protetti'];
             $falliti = (int) $_GET['rcl_falliti'];
             if ($falliti > 0) {
                 /* translators: 1: file protetti, 2: file non riusciti */
-                self::print_notice('error', sprintf(__('Codici Libro: protezione riuscita per %1$d file, non riuscita per %2$d, che restano scoperti. Succede se nella cartella protetta c\'è già un file con lo stesso nome o se il server non permette di collegare i file con link(); puoi riprovare.', 'raffaello-codici-libro'), $protetti, $falliti));
+                self::print_notice('error', sprintf(_n(
+                    'Raffaello Licenze: protezione riuscita per %1$d file, non riuscita per %2$d, che resta scoperto. Succede se nella cartella protetta c\'è già un file con lo stesso nome o se il server non permette di collegare i file con link(); puoi riprovare.',
+                    'Raffaello Licenze: protezione riuscita per %1$d file, non riuscita per %2$d, che restano scoperti. Succede se nella cartella protetta c\'è già un file con lo stesso nome o se il server non permette di collegare i file con link(); puoi riprovare.',
+                    $falliti,
+                    'raffaello-codici-libro'
+                ), $protetti, $falliti));
             } else {
                 /* translators: %d: file protetti */
-                self::print_notice('success', sprintf(__('Codici Libro: protezione riuscita per %d file.', 'raffaello-codici-libro'), $protetti));
+                self::print_notice('success', sprintf(__('Raffaello Licenze: protezione riuscita per %d file.', 'raffaello-codici-libro'), $protetti));
             }
         }
         if (isset($_GET['rcl_ricontrollato']) && get_transient(self::CHECK_TRANSIENT) === 'protetta') {
-            self::print_notice('success', __('Codici Libro: i file dei materiali risultano protetti.', 'raffaello-codici-libro'));
+            self::print_notice('success', __('Raffaello Licenze: i file dei materiali risultano protetti.', 'raffaello-codici-libro'));
         }
     }
 
@@ -477,7 +482,7 @@ class FileProtection
                     <p>
                         <strong><?php echo esc_html(sprintf(
                             /* translators: %d: numero di file */
-                            _n('Codici Libro: %d file di materiali non è protetto.', 'Codici Libro: %d file di materiali non sono protetti.', $scoperti, 'raffaello-codici-libro'),
+                            _n('Raffaello Licenze: %d file di materiali non è protetto.', 'Raffaello Licenze: %d file di materiali non sono protetti.', $scoperti, 'raffaello-codici-libro'),
                             $scoperti
                         )); ?></strong>
                         <?php esc_html_e('Chi conosce l\'indirizzo di un file scoperto lo scarica senza codice. Il pulsante sposta i file nella cartella protetta: i loro indirizzi diretti smettono di funzionare, anche dove sono usati fuori dai materiali.', 'raffaello-codici-libro'); ?>
@@ -490,7 +495,7 @@ class FileProtection
             <?php if ($mancanti) : ?>
                 <p><?php echo esc_html(sprintf(
                     /* translators: %s: nomi dei file */
-                    __('Codici Libro, da verificare: file dei materiali non trovati né al loro posto né nella cartella protetta: %s. Ricaricali dal riquadro «Materiali sbloccabili» della pagina, oppure togli quei materiali.', 'raffaello-codici-libro'),
+                    __('Raffaello Licenze, da verificare: file dei materiali non trovati né al loro posto né nella cartella protetta: %s. Ricaricali dal riquadro «Materiali sbloccabili» della pagina, oppure togli quei materiali.', 'raffaello-codici-libro'),
                     implode(', ', $mancanti)
                 )); ?></p>
             <?php endif; ?>
@@ -517,7 +522,7 @@ class FileProtection
             ?>
             <div class="notice notice-error">
                 <p>
-                    <strong><?php esc_html_e('Codici Libro: i file dei materiali non sono protetti.', 'raffaello-codici-libro'); ?></strong>
+                    <strong><?php esc_html_e('Raffaello Licenze: i file dei materiali non sono protetti.', 'raffaello-codici-libro'); ?></strong>
                     <?php esc_html_e('Chi conosce l\'indirizzo di un file lo scarica senza codice: il server non applica il file .htaccess della cartella protetta (succede con nginx). Aggiungi questa regola alla configurazione nginx del sito:', 'raffaello-codici-libro'); ?>
                 </p>
                 <pre><?php echo esc_html($rule); ?></pre>
@@ -529,7 +534,7 @@ class FileProtection
         ?>
         <div class="notice notice-warning">
             <p>
-                <strong><?php esc_html_e('Codici Libro: impossibile verificare la protezione dei file dei materiali.', 'raffaello-codici-libro'); ?></strong>
+                <strong><?php esc_html_e('Raffaello Licenze: impossibile verificare la protezione dei file dei materiali.', 'raffaello-codici-libro'); ?></strong>
                 <?php
                 printf(
                     /* translators: %s: URL dell'index.html della cartella protetta */

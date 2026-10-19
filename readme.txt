@@ -4,7 +4,7 @@ Tags: licenze, codici, sblocco, materiali, download, scuola, identity, sso, lear
 Requires at least: 5.8
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.5.1
+Stable tag: 1.5.2
 License: GPLv2 or later
 
 Licenze di accesso a pagine, materiali scaricabili e corsi LearnDash: codici stampati sui libri e acquisti sul Bookshop attivati in automatico sul profilo di Raffaello Identity.
@@ -39,6 +39,8 @@ Funzionalità:
 6. **Corsi LearnDash venduti**: modalità di accesso "Chiusa", con il pulsante verso il prodotto del Bookshop, e senza la scadenza dell'accesso di LearnDash (la scadenza la decide la licenza). Se LearnDash viene attivato dopo gli acquisti, **Licenze > Impostazioni > Riallinea LearnDash**.
 7. **Vendita sul Bookshop**: in **Licenze > Impostazioni** "Genera segreto" e copia lo stesso valore nelle impostazioni del plugin **Raffaello Licenze — Bookshop**, dove va anche l'indirizzo di questo sito; il segreto si vede una volta sola. In alternativa la costante `RCL_BOOKSHOP_SECRET` in `wp-config.php`, che ha la precedenza sulle impostazioni. Il segreto salvato vale solo sul sito che l'ha salvato: un database copiato da un altro ambiente non si porta dietro il collegamento. Ordine del go-live in `tools/bookshop/README.md`. Per una prova senza Bookshop: `tools/push-di-prova.php` genera un push o un `ping` firmato e il comando curl.
 8. **Licenze > Impostazioni** mostra lo stato della configurazione (segreto, licenze e contenuti, acquisti in attesa, pagina "I miei contenuti", LearnDash, Identity, cartella protetta, ultima richiesta dal Bookshop) con il link per correggere. I problemi bloccanti compaiono anche in Bacheca e nelle pagine del plugin, finché non sono risolti, e in Strumenti > Salute del sito.
+9. **Scadenze**: pagine e materiali controllano la scadenza a ogni richiesta, mentre l'iscrizione ai corsi LearnDash scaduti si toglie con il passaggio giornaliero del cron. Serve WP-Cron funzionante oppure, con `DISABLE_WP_CRON`, un cron di sistema: senza, le iscrizioni scadute restano.
+10. **Cache**: verifica che pagine riservate, corsi e download non arrivino dalla cache agli utenti collegati, per esempio con WP Rocket e "User Cache" attivo o con Cloudflare e "Cache Everything". Prova dopo una revoca, con due utenti diversi e da anonimo.
 
 Aggiornando dalla 1.4 i dati si migrano da soli: ogni codice con contenuti diventa una licenza con gli stessi contenuti e lo stesso stato, ogni riscatto un'attivazione con la stessa data e la scadenza del codice. Le pagine con il blocco attivo restano bloccate. Le tabelle della 1.4 restano nel database.
 
@@ -59,6 +61,11 @@ Aggiornando dalla 1.4 i dati si migrano da soli: ogni codice con contenuti diven
 * Con nginx (che ignora il .htaccess) una regola che neghi l'accesso diretto a wp-content/uploads/rcl_materiali/: se manca, il plugin mostra agli amministratori la regola da aggiungere.
 
 == Changelog ==
+
+= 1.5.2 =
+* Corretto: i testi con un numero si accordano anche al singolare, per esempio "1 licenza attiva", "1 corso collegato", "1 giorno", "1 codice", "1 attivazione", "LearnDash riallineato per 1 utente". Nessun cambiamento di comportamento.
+* Corretto: negli avvisi sulla protezione dei file, nei messaggi dei materiali e nel gruppo della condizione YOOtheme compare "Raffaello Licenze" al posto del vecchio nome "Codici Libro". I layout YOOtheme già salvati non cambiano.
+* Documentazione: il readme spiega le scadenze, che pagine e materiali controllano a ogni richiesta mentre i corsi LearnDash si tolgono con il passaggio giornaliero del cron. Spiega anche come verificare la cache dopo una revoca. tools/bookshop/README.md riporta l'ordine del go-live: prodotti RSCU non acquistabili fino alla prova finale con un prodotto di prova dedicato, verifica di cron e cache, vendite aperte per ultime. Aggiunta la gestione del rimborso parziale.
 
 = 1.5.1 =
 * Nuovo: il segreto condiviso con il Bookshop si imposta da Licenze > Impostazioni, con "Genera segreto" (mostrato una volta sola) oppure incollandolo. È salvato senza caricamento automatico e vale solo sul sito che l'ha salvato: un database copiato da un altro ambiente non si porta dietro il collegamento. Non si rilegge mai: il campo vuoto lo lascia com'è, per toglierlo c'è "Cancella segreto". La costante RCL_BOOKSHOP_SECRET in wp-config.php resta e ha la precedenza, anche vuota.

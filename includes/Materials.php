@@ -38,7 +38,7 @@ class Materials
         foreach ($this->post_types() as $type) {
             add_meta_box(
                 'rcl_materiali',
-                __('Materiali sbloccabili (Codici Libro)', 'raffaello-codici-libro'),
+                __('Materiali sbloccabili (Raffaello Licenze)', 'raffaello-codici-libro'),
                 [$this, 'render_meta_box'],
                 $type,
                 'normal',
@@ -186,8 +186,8 @@ class Materials
             esc_html(sprintf(
                 /* translators: %s: nomi dei file scartati */
                 _n(
-                    'Codici Libro: %s non è stato aggiunto ai materiali: si aggiungono solo file della cartella protetta che puoi modificare. Caricalo dal riquadro «Materiali sbloccabili» con «Scegli file», scheda «Carica file».',
-                    'Codici Libro: %s non sono stati aggiunti ai materiali: si aggiungono solo file della cartella protetta che puoi modificare. Caricali dal riquadro «Materiali sbloccabili» con «Scegli file», scheda «Carica file».',
+                    'Raffaello Licenze: %s non è stato aggiunto ai materiali: si aggiungono solo file della cartella protetta che puoi modificare. Caricalo dal riquadro «Materiali sbloccabili» con «Scegli file», scheda «Carica file».',
+                    'Raffaello Licenze: %s non sono stati aggiunti ai materiali: si aggiungono solo file della cartella protetta che puoi modificare. Caricali dal riquadro «Materiali sbloccabili» con «Scegli file», scheda «Carica file».',
                     count($scartati),
                     'raffaello-codici-libro'
                 ),

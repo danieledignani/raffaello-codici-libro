@@ -388,7 +388,7 @@ class Admin
                     <tr>
                         <td><a href="<?php echo esc_url(self::url('rcl_licenze', ['view' => 'edit', 'id' => $l->id])); ?>"><strong><?php echo esc_html($l->nome); ?></strong></a></td>
                         <td><?php echo $l->sku !== null ? '<code>' . esc_html($l->sku) . '</code>' : '—'; ?></td>
-                        <td><?php echo $l->durata_giorni !== null ? esc_html(sprintf(__('%d giorni', 'raffaello-codici-libro'), $l->durata_giorni)) : esc_html__('illimitata', 'raffaello-codici-libro'); ?></td>
+                        <td><?php echo $l->durata_giorni !== null ? esc_html(sprintf(_n('%d giorno', '%d giorni', (int) $l->durata_giorni, 'raffaello-codici-libro'), $l->durata_giorni)) : esc_html__('illimitata', 'raffaello-codici-libro'); ?></td>
                         <td><?php echo (int) $l->attiva ? esc_html__('Attiva', 'raffaello-codici-libro') : '<strong>' . esc_html__('Disattivata', 'raffaello-codici-libro') . '</strong>'; ?></td>
                         <td><?php echo (int) $l->n_contenuti; ?></td>
                         <td><a href="<?php echo esc_url(self::url('rcl_codici', ['licenza' => $l->id, 'tipo' => 'stampato'])); ?>"><?php echo (int) $l->n_stampati; ?></a></td>
@@ -641,7 +641,7 @@ class Admin
                 <button class="button"><?php esc_html_e('Filtra', 'raffaello-codici-libro'); ?></button>
             </form>
 
-            <p class="description"><?php printf(esc_html__('%d codici. I codici acquistati sono mascherati.', 'raffaello-codici-libro'), $total); ?><?php self::search_limit($cerca, $total); ?></p>
+            <p class="description"><?php echo esc_html(sprintf(_n('%d codice. I codici acquistati sono mascherati.', '%d codici. I codici acquistati sono mascherati.', $total, 'raffaello-codici-libro'), $total)); ?><?php self::search_limit($cerca, $total); ?></p>
             <table class="widefat striped">
                 <thead>
                     <tr>
@@ -878,7 +878,7 @@ class Admin
                 <button class="button"><?php esc_html_e('Cerca', 'raffaello-codici-libro'); ?></button>
             </form>
 
-            <p class="description"><?php printf(esc_html__('%d attivazioni.', 'raffaello-codici-libro'), $total); ?><?php self::search_limit($cerca, $total); ?></p>
+            <p class="description"><?php echo esc_html(sprintf(_n('%d attivazione.', '%d attivazioni.', $total, 'raffaello-codici-libro'), $total)); ?><?php self::search_limit($cerca, $total); ?></p>
             <table class="widefat striped">
                 <thead>
                     <tr>
@@ -1151,8 +1151,11 @@ class Admin
         $msg = sanitize_key($_GET['rcl_msg']);
         $ins = isset($_GET['ins']) ? (int) $_GET['ins'] : 0;
         $skip = isset($_GET['skip']) ? (int) $_GET['skip'] : 0;
+        $n = isset($_GET['n']) ? (int) $_GET['n'] : 0;
+        $ko = isset($_GET['ko']) ? (int) $_GET['ko'] : 0;
         $map = [
-            'licenza_salvata'   => ['success', __('Licenza salvata.', 'raffaello-codici-libro') . ($ins || $skip ? ' ' . sprintf(__('Codici stampati: %d aggiunti, %d scartati (già di un\'altra licenza, acquistati o troppo lunghi).', 'raffaello-codici-libro'), $ins, $skip) : '')],
+            'licenza_salvata'   => ['success', __('Licenza salvata.', 'raffaello-codici-libro') . ($ins || $skip ? ' ' . sprintf(_n('Codici stampati: %d aggiunto,', 'Codici stampati: %d aggiunti,', $ins, 'raffaello-codici-libro'), $ins)
+                . ' ' . sprintf(_n('%d scartato (già di un\'altra licenza, acquistato o troppo lungo).', '%d scartati (già di un\'altra licenza, acquistati o troppo lunghi).', $skip, 'raffaello-codici-libro'), $skip) : '')],
             'licenza_eliminata' => ['success', __('Licenza eliminata.', 'raffaello-codici-libro')],
             'licenza_in_uso'    => ['error', __('La licenza ha codici o attivazioni: disattivala invece di eliminarla.', 'raffaello-codici-libro')],
             'nome_vuoto'        => ['error', __('Il nome è obbligatorio.', 'raffaello-codici-libro')],
@@ -1163,7 +1166,8 @@ class Admin
             'codice_duplicato'  => ['error', __('Codice già presente.', 'raffaello-codici-libro')],
             'codice_non_valido' => ['error', __('Il codice è vuoto o più lungo di 64 caratteri.', 'raffaello-codici-libro')],
             'file_non_valido'   => ['error', __('File CSV mancante, non leggibile o oltre 2 MB.', 'raffaello-codici-libro')],
-            'import_ok'         => ['success', sprintf(__('Import completato: %d inseriti, %d scartati.', 'raffaello-codici-libro'), $ins, $skip)],
+            'import_ok'         => ['success', sprintf(_n('Import completato: %d inserito,', 'Import completato: %d inseriti,', $ins, 'raffaello-codici-libro'), $ins)
+                . ' ' . sprintf(_n('%d scartato.', '%d scartati.', $skip, 'raffaello-codici-libro'), $skip)],
             'utente_o_licenza'  => ['error', __('Utente o licenza non trovati.', 'raffaello-codici-libro')],
             'grant_creata'      => ['success', __('Licenza attivata per l\'utente.', 'raffaello-codici-libro')],
             'grant_esistente'   => ['warning', __('L\'utente ha già un\'attivazione manuale di questa licenza.', 'raffaello-codici-libro')],
@@ -1180,8 +1184,8 @@ class Admin
             'segreto_non_salvato' => ['error', __('Segreto non salvato: riprova.', 'raffaello-codici-libro')],
             'segreto_non_cancellato' => ['error', __('Segreto non cancellato: riprova.', 'raffaello-codici-libro')],
             'segreto_non_mostrato' => ['error', __('Segreto generato e salvato, ma non è stato possibile mostrarlo: generane un altro.', 'raffaello-codici-libro')],
-            'riallineato'       => [empty($_GET['ko']) ? 'success' : 'warning', sprintf(__('LearnDash riallineato per %d utenti.', 'raffaello-codici-libro'), isset($_GET['n']) ? (int) $_GET['n'] : 0)
-                . (empty($_GET['ko']) ? '' : ' ' . sprintf(__('Non riusciti: %d (dettagli nel log), riprova.', 'raffaello-codici-libro'), (int) $_GET['ko']))],
+            'riallineato'       => [$ko ? 'warning' : 'success', sprintf(_n('LearnDash riallineato per %d utente.', 'LearnDash riallineato per %d utenti.', $n, 'raffaello-codici-libro'), $n)
+                . ($ko ? ' ' . sprintf(_n('Non riuscito per %d utente (dettagli nel log), riprova.', 'Non riuscito per %d utenti (dettagli nel log), riprova.', $ko, 'raffaello-codici-libro'), $ko) : '')],
         ];
         if (isset($map[$msg])) {
             printf('<div class="notice notice-%s is-dismissible"><p>%s</p></div>', esc_attr($map[$msg][0]), esc_html($map[$msg][1]));
