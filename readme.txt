@@ -4,7 +4,7 @@ Tags: licenze, codici, sblocco, materiali, download, scuola, identity, sso, lear
 Requires at least: 5.8
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.5.2
+Stable tag: 1.5.3
 License: GPLv2 or later
 
 Licenze di accesso a pagine, materiali scaricabili e corsi LearnDash: codici stampati sui libri e acquisti sul Bookshop attivati in automatico sul profilo di Raffaello Identity.
@@ -36,13 +36,16 @@ Funzionalità:
 3. Materiali: meta box **"Materiali sbloccabili"** della pagina e shortcode `[raffaello_materiali]` (oppure `[raffaello_materiali post_id="123"]`), o l'elemento YOOtheme **"Materiali Codici Libro"** (gruppo Raffaello).
 4. `[raffaello_codice]` mostra il solo form del codice. `[raffaello_miei_contenuti]` va in una pagina da indicare in **Licenze > Impostazioni**: il messaggio dopo un riscatto rimanda lì.
 5. **Licenze > Codici > Importa CSV**: colonne `codice,licenza,attivabile_fino`, dove licenza è l'id o lo SKU e la data è facoltativa.
-6. **Corsi LearnDash venduti**: modalità di accesso "Chiusa", con il pulsante verso il prodotto del Bookshop, e senza la scadenza dell'accesso di LearnDash (la scadenza la decide la licenza). Se LearnDash viene attivato dopo gli acquisti, **Licenze > Impostazioni > Riallinea LearnDash**.
+6. **Corsi LearnDash venduti**: modalità di accesso "Chiusa", con il pulsante verso il prodotto del Bookshop, e senza la scadenza dell'accesso di LearnDash (la scadenza la decide la licenza). Se LearnDash viene attivato dopo gli acquisti, **Licenze > Impostazioni > Riallinea LearnDash**. Se il salvataggio di una licenza si interrompe con un errore, nella sua pagina "Riallinea LearnDash per questa licenza".
 7. **Vendita sul Bookshop**: in **Licenze > Impostazioni** "Genera segreto" e copia lo stesso valore nelle impostazioni del plugin **Raffaello Licenze — Bookshop**, dove va anche l'indirizzo di questo sito; il segreto si vede una volta sola. In alternativa la costante `RCL_BOOKSHOP_SECRET` in `wp-config.php`, che ha la precedenza sulle impostazioni. Il segreto salvato vale solo sul sito che l'ha salvato: un database copiato da un altro ambiente non si porta dietro il collegamento. Ordine del go-live in `tools/bookshop/README.md`. Per una prova senza Bookshop: `tools/push-di-prova.php` genera un push o un `ping` firmato e il comando curl.
-8. **Licenze > Impostazioni** mostra lo stato della configurazione (segreto, licenze e contenuti, acquisti in attesa, pagina "I miei contenuti", LearnDash, Identity, cartella protetta, ultima richiesta dal Bookshop) con il link per correggere. I problemi bloccanti compaiono anche in Bacheca e nelle pagine del plugin, finché non sono risolti, e in Strumenti > Salute del sito.
+8. **Licenze > Impostazioni** mostra lo stato della configurazione (segreto, tabelle e loro motore, licenze e contenuti, acquisti in attesa, pagina "I miei contenuti", LearnDash, Identity, cartella protetta, ultima richiesta dal Bookshop) con il link per correggere. I problemi bloccanti compaiono anche in Bacheca e nelle pagine del plugin, finché non sono risolti, e in Strumenti > Salute del sito.
 9. **Scadenze**: pagine e materiali controllano la scadenza a ogni richiesta, mentre l'iscrizione ai corsi LearnDash scaduti si toglie con il passaggio giornaliero del cron. Serve WP-Cron funzionante oppure, con `DISABLE_WP_CRON`, un cron di sistema: senza, le iscrizioni scadute restano.
-10. **Cache**: verifica che pagine riservate, corsi e download non arrivino dalla cache agli utenti collegati, per esempio con WP Rocket e "User Cache" attivo o con Cloudflare e "Cache Everything". Prova dopo una revoca, con due utenti diversi e da anonimo.
+10. **Cache**: le pagine bloccate, quelle con le sezioni YOOtheme condizionate e quelle con gli shortcode del plugin o con l'elemento YOOtheme dei materiali nel contenuto escono con `DONOTCACHEPAGE` e le intestazioni anticache. Uno shortcode in un widget o in un template YOOtheme, fuori dal contenuto della pagina, si vede troppo tardi per le intestazioni: escludi a mano quelle pagine dalla cache. Verifica comunque che pagine riservate, corsi e download non arrivino dalla cache agli utenti collegati, per esempio con WP Rocket e "User Cache" attivo o con Cloudflare e "Cache Everything". Prova dopo una revoca, con due utenti diversi e da anonimo.
+11. **Rimborso parziale**: in **Licenze > Codici** "Revoca definitivamente" sul codice acquistato scelto, libero o già riscattato. Fa come la revoca dal Bookshop: il codice non si usa più, le sue attivazioni si revocano e i corsi LearnDash si riallineano. Se si interrompe con un errore, "Risincronizza" sul codice revocato rifà la revoca delle attivazioni e il riallineamento.
 
 Aggiornando dalla 1.4 i dati si migrano da soli: ogni codice con contenuti diventa una licenza con gli stessi contenuti e lo stesso stato, ogni riscatto un'attivazione con la stessa data e la scadenza del codice. Le pagine con il blocco attivo restano bloccate. Le tabelle della 1.4 restano nel database.
+
+Ritorno alla 1.4: dopo che la 1.5 ha ricevuto acquisti o riscatti, sostituire lo zip non basta. Serve il ripristino del database di prima dell'aggiornamento, perché la 1.4 non legge licenze, codici acquistati e attivazioni nuove.
 
 == Test su staging ==
 
@@ -55,12 +58,28 @@ Aggiornando dalla 1.4 i dati si migrano da soli: ogni codice con contenuti diven
 * WordPress 5.8+, PHP 7.4+
 * MySQL 5.7.5+ o MariaDB 10.0.2+: i lock per nome (GET_LOCK) devono poter essere più di uno per connessione.
 * Un solo server di database, senza instradare le SELECT su repliche (HyperDB/LudicrousDB): i lock per nome valgono solo sul server che li prende.
+* Tabelle del plugin in InnoDB, e anche quelle della 1.4 finché non sono migrate: senza transazioni una migrazione interrotta resterebbe a metà. Con un altro motore le tabelle non si aggiornano e la migrazione non parte; Licenze > Impostazioni lo segnala.
 * Plugin **Raffaello Identity** per l'autenticazione SSO e per l'aggancio degli acquisti al profilo (`sub` di Identity).
 * Facoltativi: **LearnDash** (corsi), **ACF** (riquadro della pagina come field group), **YOOtheme Pro** (elemento e condizioni), **WooCommerce** (log).
 * Sul Bookshop: il plugin Raffaello Licenze — Bookshop, con WooCommerce, Action Scheduler e License Manager for WooCommerce 3.0.20. Il segreto condiviso si imposta dalle impostazioni dei due plugin, oppure con le costanti in `wp-config.php`.
 * Con nginx (che ignora il .htaccess) una regola che neghi l'accesso diretto a wp-content/uploads/rcl_materiali/: se manca, il plugin mostra agli amministratori la regola da aggiungere.
 
 == Changelog ==
+
+= 1.5.3 =
+* Corretto: un corso LearnDash entra fra quelli gestiti dal plugin prima dell'iscrizione, e i corsi gestiti si rileggono dal database sotto il lock. Un processo interrotto a metà non lascia più iscrizioni senza provenienza, e una scrittura non riuscita dei corsi gestiti è un errore.
+* Corretto: il reinvio dal Bookshop prende l'esito dall'attivazione già legata al codice. Un ordine senza destinatario riscattato a mano si chiude, e se l'acquirente riscatta anche la seconda copia le due non risultano più "libere".
+* Nuovo: le pagine bloccate, quelle con le sezioni YOOtheme condizionate e quelle con gli shortcode del plugin o con l'elemento YOOtheme dei materiali escono con DONOTCACHEPAGE e le intestazioni anticache. Uno shortcode in un widget o in un template, fuori dal contenuto, si vede troppo tardi per le intestazioni: quelle pagine vanno escluse a mano dalla cache.
+* Nuovo: in Licenze > Codici "Revoca definitivamente" sui codici acquistati, per i rimborsi parziali, e "Risincronizza" su quelli revocati, per ripetere revoca e riallineamento dopo un errore a metà.
+* Nuovo: nella pagina della licenza "Riallinea LearnDash per questa licenza". Se il salvataggio di una licenza o una revoca si interrompono con un errore, il messaggio dice dove ripetere la sincronizzazione; il controllo dei corsi non in modalità "Chiusa" ricorda di riallineare dopo averli corretti.
+* Migliorato: revoca, riattivazione e attivazione manuale rifanno la sincronizzazione dei corsi anche quando l'attivazione era già in quello stato, così ripeterle rimedia a una sincronizzazione fallita. "I miei contenuti" aggancia gli acquisti in attesa e risincronizza i corsi a ogni visita.
+* Migliorato: dopo un controllo riuscito l'avviso sui file dei materiali non rilegge i materiali per 10 minuti; una lettura non riuscita mostra un errore e si ripete alla pagina successiva.
+* Sicurezza: una lettura o una scrittura del database non riuscita non scrive più la query nel log di WordPress, con codici e sub: nel log del plugin restano operazione e tabella.
+* Sicurezza: i materiali di un contenuto non pubblicato (bozza, privato, cestinato) si scaricano solo da chi può modificarlo.
+* Sicurezza: il limite di dieci tentativi in un'ora conta anche i codici non più attivi, scaduti o già usati da altri, e ricontrolla la soglia sotto lo stesso lock in cui conta.
+* Nuovo: indice sulla scadenza delle attivazioni.
+* Requisiti: tabelle del plugin in InnoDB, e anche quelle della 1.4 finché non sono migrate. Con un altro motore le tabelle non si aggiornano e la migrazione non parte; Licenze > Impostazioni lo segnala come bloccante.
+* Documentazione: tornare alla 1.4 dopo acquisti o riscatti richiede il ripristino del database.
 
 = 1.5.2 =
 * Corretto: i testi con un numero si accordano anche al singolare, per esempio "1 licenza attiva", "1 corso collegato", "1 giorno", "1 codice", "1 attivazione", "LearnDash riallineato per 1 utente". Nessun cambiamento di comportamento.

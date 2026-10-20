@@ -54,7 +54,8 @@ esempio dal server del Bookshop per provare Cloudflare.
 
 ## Rimborso parziale
 
-Con un rimborso parziale le licenze interessate si sistemano a mano su Raffaello Scuola:
-
-- codice già riscattato: si revoca l'attivazione in Licenze > Attivazioni (ricerca per ordine);
-- codice ancora libero: si disattiva in Licenze > Codici.
+Con un rimborso parziale si sceglie a mano quale codice dell'ordine togliere. Su Raffaello
+Scuola, in Licenze > Codici (filtro per ordine), "Revoca definitivamente" su quel codice, libero o
+già riscattato: fa come la revoca dal Bookshop. Il codice non si potrà più usare né riattivare, le
+sue attivazioni si revocano e i corsi LearnDash si riallineano. Se si interrompe con un errore,
+"Risincronizza" sul codice revocato rifà la revoca delle attivazioni e il riallineamento.

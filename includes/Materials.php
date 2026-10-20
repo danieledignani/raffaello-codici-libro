@@ -165,6 +165,8 @@ class Materials
         } else {
             update_post_meta($post_id, self::META_KEY, $materiali);
         }
+        // I materiali sono cambiati: l'avviso dei file scoperti si ricontrolla.
+        delete_transient(FileProtection::MATERIALS_OK_TRANSIENT);
 
         if ($scartati) {
             update_user_meta(get_current_user_id(), self::REJECTED_META, $scartati);

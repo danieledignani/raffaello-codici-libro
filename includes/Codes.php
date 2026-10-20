@@ -25,7 +25,11 @@ class Codes
     /** Alfabeto dei generatori di License Manager. */
     const ALFABETO = 'ABCDEFGHLMNPQRSTUVZ123456789';
 
+    /** Lock dei tentativi, per utente. */
     const TENTATIVI = 'rcl_tentativi_';
+
+    /** User meta dei tentativi: ['n' => quanti, 'dal' => inizio dell'ora]. */
+    const META_TENTATIVI = 'rcl_tentativi';
 
     /**
      * Riscatta un codice per l'utente indicato.
@@ -45,7 +49,7 @@ class Codes
 
         // Controllo e conteggio dei tentativi con il lock dell'utente: richieste parallele non lo aggirano.
         if (!Database::lock(self::TENTATIVI . $user_id, 5)) {
-            return self::result(false, 'errore', __('Si è verificato un errore. Riprova.', 'raffaello-codici-libro'));
+            return self::busy();
         }
         try {
             $wait = self::wait_minutes($user_id);
@@ -57,8 +61,7 @@ class Codes
             Database::unlock(self::TENTATIVI . $user_id);
         }
         if ($wait > 0) {
-            /* translators: %d: minuti */
-            return self::result(false, 'troppi_tentativi', sprintf(_n('Troppi tentativi, riprova fra %d minuto.', 'Troppi tentativi, riprova fra %d minuti.', $wait, 'raffaello-codici-libro'), $wait));
+            return self::too_many($wait);
         }
         if (!$code) {
             return self::not_found($norm);
@@ -87,17 +90,18 @@ class Codes
         }
 
         // 2. Codice revocato o disattivato, licenza disattivata, termine per riscattare superato.
+        // Da qui in poi gli esiti negativi contano come tentativi, come i codici inesistenti.
         if ($code->revocato_il !== null || !(int) $code->attivo || ($licenza && !(int) $licenza->attiva)) {
-            return self::result(false, 'non_attivo', __('Questo codice non è più attivo.', 'raffaello-codici-libro'));
+            return self::counted($user_id, self::result(false, 'non_attivo', __('Questo codice non è più attivo.', 'raffaello-codici-libro')));
         }
         if (($code->attivabile_fino !== null && $code->attivabile_fino <= $now)
             || ($code->tipo === self::ACQUISTATO && $code->scade_il !== null && $code->scade_il <= $now)) {
-            return self::result(false, 'scaduto', __('Questo codice è scaduto.', 'raffaello-codici-libro'));
+            return self::counted($user_id, self::result(false, 'scaduto', __('Questo codice è scaduto.', 'raffaello-codici-libro')));
         }
 
         // 3. Acquistato e già attivato da un altro, anche se in attesa di agganciarsi al suo profilo.
         if ($code->tipo === self::ACQUISTATO && Activations::by_key('acq:' . $code->id)) {
-            return self::result(false, 'gia_utilizzato', __('Questo codice è già stato utilizzato.', 'raffaello-codici-libro'));
+            return self::counted($user_id, self::result(false, 'gia_utilizzato', __('Questo codice è già stato utilizzato.', 'raffaello-codici-libro')));
         }
 
         // 4. Acquistato con uno SKU non ancora configurato.
@@ -129,7 +133,7 @@ class Codes
             // Una richiesta concorrente è arrivata prima: un doppio invio dello stesso utente o un altro utente.
             return (int) $row->user_id === $user_id
                 ? self::result(true, 'gia_attivo', __('Questo codice è già attivo sul tuo profilo.', 'raffaello-codici-libro'), $licenza)
-                : self::result(false, 'gia_utilizzato', __('Questo codice è già stato utilizzato.', 'raffaello-codici-libro'));
+                : self::counted($user_id, self::result(false, 'gia_utilizzato', __('Questo codice è già stato utilizzato.', 'raffaello-codici-libro')));
         }
 
         LearnDash::sync($user_id);
@@ -205,27 +209,69 @@ class Codes
     }
 
     /* ----------------------------------------------------------------------
-     * Limite di tentativi: contano solo i codici non trovati (non validi o di
-     * un'altra piattaforma), per utente e per ora.
+     * Limite di tentativi, per utente e per ora: contano i codici non trovati (non
+     * validi o di un'altra piattaforma) e quelli che chi li prova non può usare
+     * (non attivi, scaduti, già usati da altri). Non contano gli esiti sul proprio
+     * codice: già attivo, accesso scaduto o revocato.
      * -------------------------------------------------------------------- */
+
+    /**
+     * Tentativi dell'ora in corso, dal database: si leggono sotto il lock, e la cache della richiesta
+     * può averli di prima, quando un'altra richiesta dello stesso utente li ha già contati.
+     */
+    private static function attempts(int $user_id): array
+    {
+        wp_cache_delete($user_id, 'user_meta');
+        $t = get_user_meta($user_id, self::META_TENTATIVI, true);
+        return is_array($t) && $t['dal'] + HOUR_IN_SECONDS > time() ? $t : ['n' => 0, 'dal' => time()];
+    }
 
     private static function wait_minutes(int $user_id): int
     {
-        $t = get_transient(self::TENTATIVI . $user_id);
-        if (!is_array($t) || $t['n'] < (int) apply_filters('rcl_tentativi_massimi', 10)) {
+        $t = self::attempts($user_id);
+        if ($t['n'] < (int) apply_filters('rcl_tentativi_massimi', 10)) {
             return 0;
         }
         return max(1, (int) ceil(($t['dal'] + HOUR_IN_SECONDS - time()) / MINUTE_IN_SECONDS));
     }
 
+    /**
+     * Esito che conta come tentativo. Con il lock dell'utente si ricontrolla la soglia, che richieste
+     * parallele possono aver passato insieme, e si conta prima di dare l'esito.
+     */
+    private static function counted(int $user_id, array $result): array
+    {
+        if (!Database::lock(self::TENTATIVI . $user_id, 5)) {
+            return self::busy();
+        }
+        try {
+            $wait = self::wait_minutes($user_id);
+            if ($wait === 0) {
+                self::count_attempt($user_id);
+            }
+        } finally {
+            Database::unlock(self::TENTATIVI . $user_id);
+        }
+        return $wait > 0 ? self::too_many($wait) : $result;
+    }
+
+    /** Lock dei tentativi non arrivato: un errore, mai un esito senza conteggio. */
+    private static function busy(): array
+    {
+        return self::result(false, 'errore', __('Si è verificato un errore. Riprova fra poco.', 'raffaello-codici-libro'));
+    }
+
+    private static function too_many(int $wait): array
+    {
+        /* translators: %d: minuti */
+        return self::result(false, 'troppi_tentativi', sprintf(_n('Troppi tentativi, riprova fra %d minuto.', 'Troppi tentativi, riprova fra %d minuti.', $wait, 'raffaello-codici-libro'), $wait));
+    }
+
     private static function count_attempt(int $user_id): void
     {
-        $t = get_transient(self::TENTATIVI . $user_id);
-        if (!is_array($t)) {
-            $t = ['n' => 0, 'dal' => time()];
-        }
+        $t = self::attempts($user_id);
         $t['n']++;
-        set_transient(self::TENTATIVI . $user_id, $t, max(1, $t['dal'] + HOUR_IN_SECONDS - time()));
+        update_user_meta($user_id, self::META_TENTATIVI, $t);
     }
 
     /** Struttura di risposta; con la licenza aggiunge i suoi contenuti e i link. */

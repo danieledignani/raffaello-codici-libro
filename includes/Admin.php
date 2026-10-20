@@ -81,6 +81,20 @@ class Admin
                     check_admin_referer('rcl_delete_codice_' . $id);
                     self::back('rcl_codici', ['rcl_msg' => $this->delete_codice($id) ? 'codice_eliminato' : 'codice_in_uso']);
                     break;
+                case 'revoca_codice':
+                    check_admin_referer('rcl_revoca_codice_' . $id);
+                    self::back('rcl_codici', ['rcl_msg' => $this->revoke_purchased($id, true)]);
+                    break;
+                case 'risincronizza_codice':
+                    check_admin_referer('rcl_risincronizza_codice_' . $id);
+                    self::back('rcl_codici', ['rcl_msg' => $this->revoke_purchased($id, false)]);
+                    break;
+                case 'riallinea_licenza':
+                    check_admin_referer('rcl_riallinea_licenza_' . $id);
+                    $utenti = Licenses::users($id);
+                    LearnDash::sync_users($utenti);
+                    self::back('rcl_licenze', ['view' => 'edit', 'id' => $id, 'rcl_msg' => 'riallineato', 'n' => count($utenti)]);
+                    break;
                 case 'import_csv':
                     check_admin_referer('rcl_import_csv');
                     $this->action_import_csv();
@@ -143,7 +157,12 @@ class Admin
             }
         } catch (\RuntimeException $e) {
             Log::error('Azione admin ' . $action . ' non riuscita (' . get_class($e) . ').');
-            wp_die(esc_html__('Operazione non riuscita. Riprova; se si ripete, guarda il log.', 'raffaello-codici-libro'));
+            // Dati salvati e corsi LearnDash no: ripetere il salvataggio non basta, si ripete la sincronizzazione.
+            $rimedio = [
+                'save_licenza'  => __('Riapri la licenza e controlla i dati: se risultano salvati, premi «Riallinea LearnDash per questa licenza». Se si ripete, guarda il log.', 'raffaello-codici-libro'),
+                'revoca_codice' => __('Se il codice risulta revocato, premi «Risincronizza» accanto al codice in Licenze > Codici. Se si ripete, guarda il log.', 'raffaello-codici-libro'),
+            ];
+            wp_die(esc_html(__('Operazione non riuscita.', 'raffaello-codici-libro') . ' ' . ($rimedio[$action] ?? __('Riprova; se si ripete, guarda il log.', 'raffaello-codici-libro'))));
         }
     }
 
@@ -244,6 +263,35 @@ class Admin
             'data_creazione' => Database::now(),
         ]);
         self::back('rcl_codici', ['rcl_msg' => $inserted ? 'codice_salvato' : 'codice_duplicato']);
+    }
+
+    /**
+     * "Revoca definitivamente" un codice acquistato, per un rimborso parziale: come la revoca dal
+     * Bookshop, lapide sul codice, attivazioni revocate e corsi LearnDash riallineati, con il lock
+     * dell'ordine. Senza $tombstone è "Risincronizza", sui codici già revocati: rifà la revoca delle
+     * attivazioni e la sincronizzazione dopo un errore a metà. Restituisce il messaggio.
+     */
+    private function revoke_purchased(int $id, bool $tombstone): string
+    {
+        // L'id arriva dall'URL: solo un codice acquistato e, per "Risincronizza", già revocato.
+        $code = Database::get_code($id);
+        if (!$code || $code->tipo !== Codes::ACQUISTATO || (!$tombstone && $code->revocato_il === null)) {
+            return 'codice_sconosciuto';
+        }
+        $lock = 'rcl_ordine_' . $code->ordine_id;
+        if (!Database::lock($lock, 5)) {
+            return 'ordine_occupato';
+        }
+        try {
+            if ($tombstone) {
+                Database::update('codici', ['revocato_il' => Database::now()], ['id' => $id, 'revocato_il' => null]);
+            }
+            Activations::revoke_code($id);
+        } finally {
+            Database::unlock($lock);
+        }
+        Log::info($tombstone ? 'Codice acquistato revocato definitivamente dall\'admin.' : 'Codice acquistato revocato risincronizzato dall\'admin.', ['codice' => Codes::mask($code->codice), 'ordine' => (int) $code->ordine_id, 'admin' => get_current_user_id()]);
+        return $tombstone ? 'codice_revocato' : 'codice_risincronizzato';
     }
 
     /** Elimina un codice stampato mai riscattato; gli altri si disattivano. */
@@ -505,6 +553,16 @@ class Admin
                 </table>
                 <?php submit_button($licenza ? __('Aggiorna', 'raffaello-codici-libro') : __('Crea licenza', 'raffaello-codici-libro')); ?>
             </form>
+            <?php if ($licenza && LearnDash::active()) : ?>
+                <h2><?php esc_html_e('LearnDash', 'raffaello-codici-libro'); ?></h2>
+                <form method="post" action="<?php echo esc_url(self::url('rcl_licenze')); ?>">
+                    <?php wp_nonce_field('rcl_riallinea_licenza_' . $id); ?>
+                    <input type="hidden" name="rcl_admin_action" value="riallinea_licenza" />
+                    <input type="hidden" name="id" value="<?php echo esc_attr($id); ?>" />
+                    <p class="description"><?php esc_html_e('Iscrive e disiscrive gli utenti di questa licenza dai corsi, anche da quelli appena tolti: da usare se un salvataggio si è interrotto con un errore. Tocca solo le iscrizioni fatte dal plugin.', 'raffaello-codici-libro'); ?></p>
+                    <?php submit_button(__('Riallinea LearnDash per questa licenza', 'raffaello-codici-libro'), 'secondary', 'submit', false); ?>
+                </form>
+            <?php endif; ?>
         </div>
         <?php
     }
@@ -677,6 +735,11 @@ class Admin
                             | <a href="<?php echo esc_url(self::action_url('rcl_codici', 'toggle_codice', (int) $c->id)); ?>"><?php echo (int) $c->attivo ? esc_html__('Disattiva', 'raffaello-codici-libro') : esc_html__('Attiva', 'raffaello-codici-libro'); ?></a>
                             <?php if (!$acquistato && !(int) $c->n_attivazioni) : ?>
                                 | <a href="<?php echo esc_url(self::action_url('rcl_codici', 'delete_codice', (int) $c->id)); ?>" onclick="return confirm('<?php echo esc_js(__('Eliminare il codice?', 'raffaello-codici-libro')); ?>');"><?php esc_html_e('Elimina', 'raffaello-codici-libro'); ?></a>
+                            <?php endif; ?>
+                            <?php if ($acquistato && $c->revocato_il === null) : ?>
+                                | <a href="<?php echo esc_url(self::action_url('rcl_codici', 'revoca_codice', (int) $c->id)); ?>" onclick="return confirm('<?php echo esc_js(__('Revocare definitivamente questo codice? Le sue attivazioni si revocano e il codice non si potrà più usare né riattivare.', 'raffaello-codici-libro')); ?>');"><?php esc_html_e('Revoca definitivamente', 'raffaello-codici-libro'); ?></a>
+                            <?php elseif ($acquistato) : ?>
+                                | <a href="<?php echo esc_url(self::action_url('rcl_codici', 'risincronizza_codice', (int) $c->id)); ?>"><?php esc_html_e('Risincronizza', 'raffaello-codici-libro'); ?></a>
                             <?php endif; ?>
                         </td>
                     </tr>
@@ -1162,6 +1225,10 @@ class Admin
             'sku_duplicato'     => ['error', __('Lo SKU è già usato da un\'altra licenza.', 'raffaello-codici-libro')],
             'codice_salvato'    => ['success', __('Codice salvato.', 'raffaello-codici-libro')],
             'codice_eliminato'  => ['success', __('Codice eliminato.', 'raffaello-codici-libro')],
+            'codice_revocato'   => ['success', __('Codice revocato definitivamente: le sue attivazioni sono revocate e i corsi riallineati.', 'raffaello-codici-libro')],
+            'codice_sconosciuto' => ['error', __('Codice non valido.', 'raffaello-codici-libro')],
+            'codice_risincronizzato' => ['success', __('Codice revocato risincronizzato: le sue attivazioni sono revocate e i corsi riallineati.', 'raffaello-codici-libro')],
+            'ordine_occupato'   => ['warning', __('L\'ordine del codice è in elaborazione: riprova fra qualche secondo.', 'raffaello-codici-libro')],
             'codice_in_uso'     => ['error', __('Si eliminano solo i codici stampati mai riscattati: disattivalo invece.', 'raffaello-codici-libro')],
             'codice_duplicato'  => ['error', __('Codice già presente.', 'raffaello-codici-libro')],
             'codice_non_valido' => ['error', __('Il codice è vuoto o più lungo di 64 caratteri.', 'raffaello-codici-libro')],

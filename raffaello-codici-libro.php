@@ -3,7 +3,7 @@
  * Plugin Name: Raffaello Licenze
  * Plugin URI: https://raffaellolibri.it
  * Description: Licenze di accesso a pagine, materiali scaricabili e corsi LearnDash: codici stampati sui libri, acquisti sul Bookshop attivati in automatico sul profilo di Raffaello Identity, attivazioni manuali per l'assistenza.
- * Version: 1.5.2
+ * Version: 1.5.3
  * Author: Gruppo Raffaello
  * Text Domain: raffaello-codici-libro
  * Domain Path: /languages
@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('RCL_VERSION', '1.5.2');
+define('RCL_VERSION', '1.5.3');
 define('RCL_PLUGIN_FILE', __FILE__);
 define('RCL_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('RCL_PLUGIN_URL', plugin_dir_url(__FILE__));

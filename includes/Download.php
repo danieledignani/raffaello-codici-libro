@@ -60,6 +60,11 @@ class Download
             auth_redirect();
         }
 
+        // Contenuto in bozza, privato o cestinato: i suoi materiali solo a chi può modificarlo.
+        if (get_post_status($post_id) !== 'publish' && !current_user_can('edit_post', $post_id)) {
+            wp_die(esc_html__('Materiale non disponibile.', 'raffaello-codici-libro'), 404);
+        }
+
         $user_id = get_current_user_id();
         if (!Codes::user_can_access($user_id, $post_id)) {
             wp_die(esc_html__('Non hai i permessi per scaricare questo materiale.', 'raffaello-codici-libro'), 403);

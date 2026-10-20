@@ -126,43 +126,50 @@ class Activations
     {
         global $wpdb;
         $sub = $code->destinatario_sub;
-        if ($sub === null) {
-            return 'senza_destinatario';
+
+        // Se il codice ha già la sua attivazione (un reinvio, o un riscatto a mano) l'esito viene da lei:
+        // così un ordine senza destinatario riscattato a mano si chiude, e la seconda copia riscattata
+        // dall'acquirente non rende "libera" la prima.
+        $row = self::by_key('acq:' . $code->id);
+        if (!$row) {
+            if ($sub === null) {
+                return 'senza_destinatario';
+            }
+            // Quantità > 1: per ordine e licenza l'acquirente riceve solo il primo codice, gli altri restano liberi.
+            $first = Database::get_var($wpdb->prepare(
+                'SELECT 1 FROM ' . Database::table('attivazioni') . ' WHERE ordine_id = %d AND licenza_id = %d AND sub = %s AND codice_id <> %d LIMIT 1',
+                (int) $code->ordine_id,
+                (int) $code->licenza_id,
+                $sub,
+                (int) $code->id
+            ));
+            if ($first) {
+                return 'codice_libero';
+            }
+            $users = self::users_by_sub($sub);
+            $row = self::create([
+                'chiave'     => 'acq:' . $code->id,
+                'licenza_id' => (int) $code->licenza_id,
+                'user_id'    => count($users) === 1 ? $users[0] : null,
+                'sub'        => $sub,
+                'codice_id'  => (int) $code->id,
+                'origine'    => self::ACQUISTO,
+                'ordine_id'  => (int) $code->ordine_id,
+                'scade_il'   => $code->scade_il,
+            ])[0];
         }
 
-        // Quantità > 1: per ordine e licenza l'acquirente riceve solo il primo codice, gli altri restano liberi.
-        $first = Database::get_var($wpdb->prepare(
-            'SELECT 1 FROM ' . Database::table('attivazioni') . ' WHERE ordine_id = %d AND licenza_id = %d AND sub = %s AND codice_id <> %d LIMIT 1',
-            (int) $code->ordine_id,
-            (int) $code->licenza_id,
-            $sub,
-            (int) $code->id
-        ));
-        if ($first) {
-            return 'codice_libero';
-        }
-
-        $users = self::users_by_sub($sub);
-        $user_id = count($users) === 1 ? $users[0] : null;
-        $row = self::create([
-            'chiave'     => 'acq:' . $code->id,
-            'licenza_id' => (int) $code->licenza_id,
-            'user_id'    => $user_id,
-            'sub'        => $sub,
-            'codice_id'  => (int) $code->id,
-            'origine'    => self::ACQUISTO,
-            'ordine_id'  => (int) $code->ordine_id,
-            'scade_il'   => $code->scade_il,
-        ])[0];
-
-        // Già riscattato a mano da qualcun altro, quando era libero.
-        if ($row->sub !== $sub) {
+        // Riscattato a mano da qualcun altro, quando era libero.
+        if ($sub !== null && $row->sub !== $sub) {
             return 'codice_libero';
         }
         // Ripetizione dopo che l'utente è comparso: si aggancia ora.
-        if ($row->user_id === null && $user_id !== null) {
-            Database::update('attivazioni', ['user_id' => $user_id, 'data_modifica' => Database::now()], ['id' => (int) $row->id, 'user_id' => null]);
-            $row = self::by_key('acq:' . $code->id);
+        if ($row->user_id === null && $sub !== null) {
+            $users = self::users_by_sub($sub);
+            if (count($users) === 1) {
+                Database::update('attivazioni', ['user_id' => $users[0], 'data_modifica' => Database::now()], ['id' => (int) $row->id, 'user_id' => null]);
+                $row = self::by_key('acq:' . $code->id);
+            }
         }
         // Sempre, anche se l'attivazione c'era già: un reinvio rifà una sincronizzazione fallita.
         if ($row->user_id !== null) {
@@ -184,38 +191,43 @@ class Activations
         LearnDash::sync_users(Database::get_col($wpdb->prepare("SELECT DISTINCT user_id FROM {$table} WHERE codice_id = %d AND user_id IS NOT NULL", $codice_id)));
     }
 
-    /** Revoca di una singola attivazione dall'admin, anche per i rimborsi parziali. */
+    /**
+     * Revoca di una singola attivazione dall'admin, anche per i rimborsi parziali. Vero se l'ha
+     * revocata ora. Sincronizza anche se era già revocata: ripeterla rifà una sincronizzazione fallita.
+     */
     public static function revoke(int $id): bool
     {
         $row = self::get($id);
-        if (!$row || !Database::update('attivazioni', ['stato' => self::REVOCATA, 'data_modifica' => Database::now()], ['id' => $id, 'stato' => self::ATTIVA])) {
+        if (!$row) {
             return false;
         }
+        $changed = Database::update('attivazioni', ['stato' => self::REVOCATA, 'data_modifica' => Database::now()], ['id' => $id, 'stato' => self::ATTIVA]) === 1;
         if ($row->user_id !== null) {
             LearnDash::sync((int) $row->user_id);
         }
-        return true;
+        return $changed;
     }
 
     /**
      * Riattivazione esplicita dall'admin. Non vale per le attivazioni di un
-     * codice revocato dal Bookshop: quella revoca è definitiva.
+     * codice revocato definitivamente. Vero se l'ha riattivata ora; sincronizza
+     * anche se era già attiva: ripeterla rifà una sincronizzazione fallita.
      */
     public static function reactivate(int $id): bool
     {
         $row = self::get($id);
-        if (!$row || $row->stato !== self::REVOCATA) {
+        if (!$row) {
             return false;
         }
         $code = $row->codice_id !== null ? Database::get_code((int) $row->codice_id) : null;
         if ($code && $code->revocato_il !== null) {
             return false;
         }
-        Database::update('attivazioni', ['stato' => self::ATTIVA, 'data_modifica' => Database::now()], ['id' => $id]);
+        $changed = Database::update('attivazioni', ['stato' => self::ATTIVA, 'data_modifica' => Database::now()], ['id' => $id, 'stato' => self::REVOCATA]) === 1;
         if ($row->user_id !== null) {
             LearnDash::sync((int) $row->user_id);
         }
-        return true;
+        return $changed;
     }
 
     /**
@@ -232,8 +244,9 @@ class Activations
             'origine'    => self::MANUALE,
             'scade_il'   => $scade_il,
         ]);
+        // Anche se c'era già: ripetere il form rifà una sincronizzazione fallita.
+        LearnDash::sync($user_id);
         if ($created) {
-            LearnDash::sync($user_id);
             return 'creata';
         }
         return $row->stato === self::REVOCATA ? 'revocata' : 'esistente';

@@ -54,11 +54,27 @@ class ContentLock
             $lock = null;
         }
 
-        if ($lock && Codes::user_can_access($user_id, $post_id)) {
-            $lock = null;
+        if ($lock) {
+            // Bloccato o no, quello che si vede dipende dalla licenza dell'utente.
+            self::no_cache();
+            if (Codes::user_can_access($user_id, $post_id)) {
+                $lock = null;
+            }
         }
 
         return $cache[$key] = $lock;
+    }
+
+    /**
+     * La risposta dipende dall'utente o dalla sua licenza: niente cache di pagina (DONOTCACHEPAGE,
+     * per i plugin di cache) né del browser o del CDN (intestazioni, finché non sono partite).
+     */
+    public static function no_cache(): void
+    {
+        if (!defined('DONOTCACHEPAGE')) {
+            define('DONOTCACHEPAGE', true);
+        }
+        nocache_headers();
     }
 
     public function register_rest(): void

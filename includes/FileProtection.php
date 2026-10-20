@@ -25,6 +25,9 @@ class FileProtection
 
     const CHECK_TRANSIENT = 'rcl_protezione_file';
 
+    /** Materiali a posto all'ultimo controllo: l'avviso non rilegge i file per 10 minuti. */
+    const MATERIALS_OK_TRANSIENT = 'rcl_materiali_a_posto';
+
     /** Riga di wp_options usata come lock della protezione: "token|timestamp" del proprietario. */
     const LOCK_OPTION = 'rcl_protezione_lock';
     const LOCK_MAX_AGE = 600;
@@ -136,7 +139,7 @@ class FileProtection
     {
         global $wpdb;
         $ids = [];
-        $values = $wpdb->get_col(
+        $values = Database::get_col(
             $wpdb->prepare("SELECT meta_value FROM {$wpdb->postmeta} WHERE meta_key = %s", Materials::META_KEY)
         );
         foreach ($values as $value) {
@@ -330,10 +333,16 @@ class FileProtection
             wp_safe_redirect(add_query_arg('rcl_occupato', 1, $back));
             exit;
         }
+        try {
+            $scoperti = self::unprotected()['scoperti'];
+        } catch (\RuntimeException $e) {
+            self::release_lock($token);
+            wp_die(esc_html__('Protezione dei file non riuscita: i materiali non si leggono. Riprova; se si ripete, guarda il log.', 'raffaello-codici-libro'));
+        }
         $protetti = 0;
         $falliti = 0;
         try {
-            foreach (self::unprotected()['scoperti'] as $id) {
+            foreach ($scoperti as $id) {
                 if (self::protect($id)) {
                     $protetti++;
                 } else {
@@ -343,6 +352,7 @@ class FileProtection
         } finally {
             self::release_lock($token);
         }
+        delete_transient(self::MATERIALS_OK_TRANSIENT);
         wp_safe_redirect(add_query_arg(['rcl_protetti' => $protetti, 'rcl_falliti' => $falliti], $back));
         exit;
     }
@@ -467,9 +477,19 @@ class FileProtection
     /** Materiali salvati prima della protezione: l'avviso resta finché ce n'è uno da sistemare. */
     private function unprotected_notice(): void
     {
-        $da_sistemare = self::unprotected();
+        if (get_transient(self::MATERIALS_OK_TRANSIENT)) {
+            return;
+        }
+        try {
+            $da_sistemare = self::unprotected();
+        } catch (\RuntimeException $e) {
+            // Una lettura fallita non è "tutto a posto": niente transient, si riprova alla prossima pagina.
+            self::print_notice('error', __('Raffaello Licenze: controllo dei file dei materiali non riuscito, si riprova alla prossima pagina. Dettagli nel log.', 'raffaello-codici-libro'));
+            return;
+        }
         $scoperti = count($da_sistemare['scoperti']);
         if ($scoperti === 0 && !$da_sistemare['mancanti']) {
+            set_transient(self::MATERIALS_OK_TRANSIENT, 1, 10 * MINUTE_IN_SECONDS);
             return;
         }
         $mancanti = array_map(function ($id) {

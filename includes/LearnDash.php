@@ -52,6 +52,8 @@ class LearnDash
         }
 
         try {
+            // Con il lock, la meta dal database: quella in cache può averla cambiata un'altra richiesta.
+            wp_cache_delete($user_id, 'user_meta');
             $covered = array_map('intval', Database::get_col($wpdb->prepare(
                 'SELECT DISTINCT lp.post_id
                  FROM ' . Database::table('attivazioni') . ' a
@@ -63,19 +65,23 @@ class LearnDash
                 $user_id,
                 Database::now()
             )));
-            $managed = array_map('intval', array_filter((array) get_user_meta($user_id, self::META, true)));
+            $managed = self::managed($user_id);
             $failed = 0;
 
-            // Conta lo stato finale, non il valore restituito: LearnDash dà false anche quando non
-            // c'era niente da fare. Un corso entra fra i gestiti solo se l'accesso c'è davvero.
+            // Prima il corso fra i gestiti, poi l'iscrizione: se il processo si interrompe in mezzo, il
+            // giro dopo lo ritrova come nostro e non come un'iscrizione esterna. Conta lo stato finale,
+            // non il valore restituito: LearnDash dà false anche quando non c'era niente da fare.
             foreach ($covered as $course_id) {
                 if (sfwd_lms_has_access($course_id, $user_id)) {
                     continue;
                 }
-                ld_update_course_access($user_id, $course_id);
-                if (sfwd_lms_has_access($course_id, $user_id)) {
+                if (!in_array($course_id, $managed, true)) {
                     $managed[] = $course_id;
-                } else {
+                    self::save_managed($user_id, $managed);
+                }
+                ld_update_course_access($user_id, $course_id);
+                if (!sfwd_lms_has_access($course_id, $user_id)) {
+                    $managed = array_values(array_diff($managed, [$course_id]));
                     $failed++;
                 }
             }
@@ -90,17 +96,28 @@ class LearnDash
                 }
             }
 
-            $managed = array_values(array_unique($managed));
-            if ($managed) {
-                update_user_meta($user_id, self::META, $managed);
-            } else {
-                delete_user_meta($user_id, self::META);
-            }
+            self::save_managed($user_id, array_values(array_unique($managed)));
             if ($failed) {
                 throw new \RuntimeException('LearnDash non ha applicato tutte le iscrizioni');
             }
         } finally {
             Database::unlock('rcl_utente_' . $user_id);
+        }
+    }
+
+    /** Corsi iscritti dal plugin, dalla meta dell'utente. */
+    private static function managed(int $user_id): array
+    {
+        return array_values(array_map('intval', array_filter((array) get_user_meta($user_id, self::META, true))));
+    }
+
+    /** Salva i corsi gestiti; una scrittura non riuscita è un'eccezione. */
+    private static function save_managed(int $user_id, array $managed): void
+    {
+        $ok = $managed ? update_user_meta($user_id, self::META, $managed) : delete_user_meta($user_id, self::META);
+        // update_user_meta() dà false anche quando il valore è già quello: allora non è un errore.
+        if (!$ok && self::managed($user_id) !== $managed) {
+            throw new \RuntimeException('Corsi gestiti non salvati');
         }
     }
 

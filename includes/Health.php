@@ -78,6 +78,13 @@ class Health
             /* translators: 1: versione delle tabelle, 2: versione del plugin */
             : self::item('tabelle', self::BLOCCANTE, __('Tabelle del plugin', 'raffaello-codici-libro'), sprintf(__('Non aggiornate (%1$s invece di %2$s): si riprova a ogni richiesta. Se resta così, guarda il log (sorgente raffaello-licenze).', 'raffaello-codici-libro'), $versione ?: '—', RCL_VERSION));
 
+        // Le transazioni (migrazione) valgono solo con InnoDB.
+        $altri = Database::non_innodb();
+        $p[] = $altri
+            /* translators: %s: tabelle con il loro motore */
+            ? self::item('motore', self::BLOCCANTE, __('Motore delle tabelle', 'raffaello-codici-libro'), sprintf(__('Tabelle non InnoDB: %s. Senza transazioni una migrazione interrotta resterebbe a metà: finché non le converti in InnoDB le tabelle non si aggiornano e la migrazione dalla 1.4 non parte.', 'raffaello-codici-libro'), implode(', ', $altri)))
+            : self::item('motore', self::OK, __('Motore delle tabelle', 'raffaello-codici-libro'), __('InnoDB.', 'raffaello-codici-libro'));
+
         $p[] = $vendibili
             /* translators: %d: numero di licenze */
             ? self::item('licenze', self::OK, __('Licenze vendute sul Bookshop', 'raffaello-codici-libro'), sprintf(_n('%d licenza attiva con lo SKU di un prodotto.', '%d licenze attive con lo SKU di un prodotto.', $vendibili, 'raffaello-codici-libro'), $vendibili))
@@ -121,7 +128,7 @@ class Health
         // In modalità aperta o gratuita si entra nel corso senza licenza.
         $p[] = self::course_setting($corsi, 'modalita', __('Corsi in modalità «Chiusa»', 'raffaello-codici-libro'), function ($id) {
             return learndash_get_setting($id, 'course_price_type') !== 'closed';
-        }, self::BLOCCANTE, __('Corsi non in modalità «Chiusa»: %s. In un\'altra modalità ci si iscrive senza licenza, o si paga su LearnDash.', 'raffaello-codici-libro'));
+        }, self::BLOCCANTE, __('Corsi non in modalità «Chiusa»: %s. In un\'altra modalità ci si iscrive senza licenza, o si paga su LearnDash. Dopo averli passati a «Chiusa» premi «Riallinea LearnDash» in Licenze > Impostazioni.', 'raffaello-codici-libro'));
         // Come ld_course_access_expires_on() di LearnDash 5.0.2: conta solo con i giorni impostati.
         $p[] = self::course_setting($corsi, 'scadenza_corsi', __('Corsi senza scadenza dell\'accesso di LearnDash', 'raffaello-codici-libro'), function ($id) {
             return learndash_get_setting($id, 'expire_access') && abs((int) learndash_get_setting($id, 'expire_access_days')) > 0;

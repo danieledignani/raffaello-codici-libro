@@ -124,7 +124,8 @@ class Database
                 KEY sub (sub),
                 KEY licenza_id (licenza_id),
                 KEY codice_id (codice_id),
-                KEY ordine_id (ordine_id)
+                KEY ordine_id (ordine_id),
+                KEY scade_il (scade_il)
             ) {$charset_collate};";
 
             foreach ($sql as $statement) {
@@ -137,8 +138,13 @@ class Database
                 }
             }
 
-            $from = get_option('rcl_db_version');
-            if ($from && version_compare($from, '1.5.0', '<')) {
+            // Senza transazioni una migrazione interrotta resta a metà: niente migrazione né versione nuova.
+            $altri = self::non_innodb();
+            if ($altri) {
+                Log::error('Tabelle non InnoDB: versione non aggiornata, si riprova alla prossima richiesta.', ['tabelle' => $altri]);
+                return false;
+            }
+            if (self::migration_pending()) {
                 Migration::run();
             }
             return true;
@@ -148,6 +154,34 @@ class Database
         } finally {
             self::unlock('rcl_migrazione');
         }
+    }
+
+    /** La versione salvata è della 1.4: i suoi dati non sono ancora migrati. */
+    private static function migration_pending(): bool
+    {
+        $from = get_option('rcl_db_version');
+        return $from && version_compare($from, '1.5.0', '<');
+    }
+
+    /**
+     * Tabelle non InnoDB, come "nome (motore)": quelle del plugin e, finché la migrazione dalla 1.4
+     * non è fatta, anche le sue.
+     */
+    public static function non_innodb(): array
+    {
+        global $wpdb;
+        $names = ['licenze', 'licenza_post', 'codici', 'attivazioni'];
+        if (self::migration_pending()) {
+            array_push($names, 'codice_post', 'riscatti');
+        }
+        $tables = array_map([self::class, 'table'], $names);
+        $out = [];
+        foreach (self::get_results($wpdb->prepare('SHOW TABLE STATUS WHERE Name IN (' . implode(', ', array_fill(0, count($tables), '%s')) . ')', $tables)) as $t) {
+            if (strcasecmp((string) $t->Engine, 'InnoDB') !== 0) {
+                $out[] = $t->Name . ' (' . $t->Engine . ')';
+            }
+        }
+        return $out;
     }
 
     /**
@@ -160,12 +194,15 @@ class Database
         preg_match('/CREATE TABLE (\S+)/', $statement, $table);
         preg_match_all('/^\s*(\w+) (?:BIGINT|INT|TINYINT|VARCHAR|DATETIME)/m', $statement, $columns);
         preg_match_all('/UNIQUE KEY \w+ \(([^)]+)\)/', $statement, $uniques);
+        preg_match_all('/^\s*KEY (\w+) \(/m', $statement, $keys);
 
         if (array_diff($columns[1], $wpdb->get_col("SHOW COLUMNS FROM {$table[1]}"))) {
             return false;
         }
         $have = [];
+        $names = [];
         foreach ($wpdb->get_results("SHOW INDEX FROM {$table[1]}") as $index) {
+            $names[$index->Key_name] = true;
             if (!(int) $index->Non_unique) {
                 $have[$index->Key_name][(int) $index->Seq_in_index] = $index->Column_name;
             }
@@ -174,7 +211,7 @@ class Database
             ksort($cols);
             $have[$key] = implode(',', $cols);
         }
-        return !array_diff($uniques[1], $have);
+        return !array_diff($uniques[1], $have) && !array_diff($keys[1], array_keys($names));
     }
 
     /**
@@ -205,52 +242,50 @@ class Database
     /** Query di scrittura: restituisce le righe toccate. */
     public static function query(string $sql): int
     {
-        global $wpdb;
-        $res = $wpdb->query($sql);
-        if ($res === false) {
-            throw new \RuntimeException('Errore del database');
-        }
-        return (int) $res;
+        return (int) self::run('query', $sql);
     }
 
     public static function get_row(string $sql)
     {
-        global $wpdb;
-        $row = $wpdb->get_row($sql);
-        self::check();
-        return $row;
+        return self::run('get_row', $sql);
     }
 
     public static function get_var(string $sql)
     {
-        global $wpdb;
-        $var = $wpdb->get_var($sql);
-        self::check();
-        return $var;
+        return self::run('get_var', $sql);
     }
 
     public static function get_col(string $sql): array
     {
-        global $wpdb;
-        $col = $wpdb->get_col($sql);
-        self::check();
-        return $col;
+        return self::run('get_col', $sql);
     }
 
     public static function get_results(string $sql): array
     {
-        global $wpdb;
-        $rows = $wpdb->get_results($sql);
-        self::check();
-        return $rows;
+        return self::run('get_results', $sql);
     }
 
-    private static function check(): void
+    /**
+     * Un metodo di wpdb con i suoi errori automatici spenti: scriverebbero nel log la query, con codici
+     * e sub, e last_error li ripete ("Duplicate entry"). Nel log solo l'operazione e la tabella.
+     */
+    private static function run(string $method, string $sql)
     {
         global $wpdb;
-        if ($wpdb->last_error !== '') {
+        $prev = $wpdb->suppress_errors(true);
+        try {
+            $res = $wpdb->$method($sql);
+        } finally {
+            $wpdb->suppress_errors($prev);
+        }
+        // query() segnala l'errore con false, le letture solo con last_error.
+        if ($method === 'query' ? $res === false : $wpdb->last_error !== '') {
+            preg_match('/^\s*(\w+)/', $sql, $op);
+            preg_match('/\b' . preg_quote($wpdb->prefix, '/') . '\w+/', $sql, $table);
+            Log::error($method === 'query' ? 'Scrittura non riuscita.' : 'Lettura non riuscita.', ['operazione' => strtoupper($op[1] ?? ''), 'tabella' => $table[0] ?? '']);
             throw new \RuntimeException('Errore del database');
         }
+        return $res;
     }
 
     /** Valori per una query: NULL senza apici, interi come %d, il resto come %s. */

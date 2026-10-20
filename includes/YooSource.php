@@ -73,6 +73,7 @@ class YooSource
      */
     public static function resolve_page_access(): bool
     {
+        ContentLock::no_cache();
         if (!is_user_logged_in()) {
             return false;
         }

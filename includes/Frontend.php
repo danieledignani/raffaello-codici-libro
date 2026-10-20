@@ -26,6 +26,8 @@ class Frontend
         add_shortcode('raffaello_materiali', [$this, 'shortcode_materiali']);
         add_shortcode('raffaello_codice', [$this, 'shortcode_form']);
         add_shortcode('raffaello_miei_contenuti', [$this, 'shortcode_miei_contenuti']);
+        // Le intestazioni anticache vanno inviate prima dell'output, che contiene gli shortcode.
+        add_action('template_redirect', [$this, 'no_cache_shortcodes']);
         // Dopo gli shortcode (priorità 11), che mostrano l'esito vicino al form; senza loop, in fondo.
         add_filter('the_content', [$this, 'esito_in_testa'], 12);
         add_action('wp_footer', [$this, 'esito_flottante']);
@@ -52,12 +54,35 @@ class Frontend
     }
 
     /**
+     * Pagina con uno shortcode del plugin o con l'elemento YOOtheme dei materiali: dipende dall'utente
+     * (licenze, form con nonce). Le sezioni con la condizione «Accesso materiali» le vede già PageGate,
+     * con ContentLock::of().
+     */
+    public function no_cache_shortcodes(): void
+    {
+        $post = is_singular() ? get_post(get_queried_object_id()) : null;
+        if (!$post) {
+            return;
+        }
+        // Il layout YOOtheme è un JSON nel contenuto; "type" è il "name" dell'element.json dei materiali.
+        $uses = strpos($post->post_content, '"type":"rcl_materiali"') !== false;
+        foreach (['raffaello_materiali', 'raffaello_codice', 'raffaello_miei_contenuti'] as $tag) {
+            $uses = $uses || has_shortcode($post->post_content, $tag);
+        }
+        if ($uses) {
+            ContentLock::no_cache();
+        }
+    }
+
+    /**
      * Shortcode [raffaello_materiali post_id="123"].
      * Mostra i materiali del contenuto: sbloccati (con link di download) oppure
      * bloccati (anteprima + form di sblocco contestuale).
      */
     public function shortcode_materiali($atts): string
     {
+        // Anche fuori dal contenuto della pagina (builder, widget): almeno niente cache di pagina.
+        ContentLock::no_cache();
         $atts = shortcode_atts(['post_id' => 0], $atts, 'raffaello_materiali');
         $post_id = (int) $atts['post_id'] ?: get_the_ID();
         if (!$post_id) {
@@ -89,6 +114,7 @@ class Frontend
     /** Shortcode [raffaello_codice] — solo il form di inserimento (es. area riservata). */
     public function shortcode_form($atts): string
     {
+        ContentLock::no_cache();
         $atts = shortcode_atts(['post_id' => 0], $atts, 'raffaello_codice');
         $post_id = (int) $atts['post_id'] ?: get_the_ID();
 
@@ -105,6 +131,7 @@ class Frontend
      */
     public function shortcode_miei_contenuti($atts): string
     {
+        ContentLock::no_cache();
         ob_start();
         echo '<div class="rcl-miei-contenuti">';
         if (is_user_logged_in()) {
@@ -153,6 +180,14 @@ class Frontend
     /** Licenze dell'utente: attive con scadenza e contenuti, poi scadute o sospese. */
     private function render_licenses(int $user_id): void
     {
+        // Gli acquisti in attesa del suo sub si agganciano anche qui, non solo al login, e i corsi si
+        // risincronizzano: una sincronizzazione fallita prima (al login, dopo un aggancio) si riprova qui.
+        try {
+            Activations::link_user($user_id);
+            LearnDash::sync($user_id);
+        } catch (\Throwable $e) {
+            Log::error('Aggancio o sincronizzazione in «I miei contenuti» non riusciti (' . get_class($e) . ').', ['user_id' => $user_id]);
+        }
         $now = Database::now();
         $licenze = [];
         foreach (Activations::of_user($user_id) as $a) {
